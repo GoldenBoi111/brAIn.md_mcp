@@ -808,6 +808,46 @@ export async function saveLockSet(vaultRoot: string, locked: Iterable<string>): 
   await atomicWrite(path.join(vaultRoot, LOCK_FILE_NAME), JSON.stringify({ locked_paths: Array.from(new Set(locked)).sort() }, null, 2) + "\n");
 }
 
+export async function lockPath(vaultRoot: string, relativePath: string): Promise<boolean> {
+  const rel = normalizeRelPath(relativePath);
+  const locks = await loadLockSet(vaultRoot);
+  if (locks.has(rel)) {
+    return false;
+  }
+  locks.add(rel);
+  await saveLockSet(vaultRoot, locks);
+  return true;
+}
+
+export async function unlockPath(vaultRoot: string, relativePath: string): Promise<boolean> {
+  const rel = normalizeRelPath(relativePath);
+  const locks = await loadLockSet(vaultRoot);
+  if (!locks.has(rel)) {
+    return false;
+  }
+  locks.delete(rel);
+  await saveLockSet(vaultRoot, locks);
+  return true;
+}
+
+export async function getLockedPaths(vaultRoot: string): Promise<string[]> {
+  const locks = await loadLockSet(vaultRoot);
+  return Array.from(locks).sort();
+}
+
+export async function togglePathLock(vaultRoot: string, relativePath: string): Promise<boolean> {
+  const rel = normalizeRelPath(relativePath);
+  const locks = await loadLockSet(vaultRoot);
+  const isLocked = locks.has(rel);
+  if (isLocked) {
+    locks.delete(rel);
+  } else {
+    locks.add(rel);
+  }
+  await saveLockSet(vaultRoot, locks);
+  return !isLocked;
+}
+
 export async function issueToken(options: {
   tenantId: string;
   tokenName: string;
