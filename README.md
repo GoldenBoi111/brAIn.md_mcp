@@ -21,6 +21,7 @@ The current backend includes:
 - Qdrant-backed vector search and update flow
 - Jasper embedder integration
 - Folder-scoped read and write restrictions for MCP tokens
+- Mutable token-scoped lock records keyed by MCP JWT `jti`
 
 The important design split is:
 
@@ -66,11 +67,17 @@ Routes:
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
 - `POST /api/mcp/token`
+- `GET /api/mcp/token/[tokenId]/locks`
+- `POST /api/mcp/token/[tokenId]/locks`
+- `DELETE /api/mcp/token/[tokenId]/locks`
 - `GET /api/files`
 - `POST /api/files`
 - `GET /api/files/[id]`
 - `PUT /api/files/[id]`
 - `DELETE /api/files/[id]`
+- `GET /api/vault/locks`
+- `POST /api/vault/locks`
+- `DELETE /api/vault/locks`
 - `GET /api/search`
 - `POST /api/search`
 - `GET /api/embed`
@@ -154,6 +161,22 @@ The MCP token includes:
 
 The MCP token is a separate credential from the UI session.
 
+### Mutable token locks
+
+Each MCP token gets a server-side mutable lock record keyed by its JWT `jti`.
+
+The lock store lives in:
+
+- `./vaults/.mcp-token-locks.json`
+
+Each entry stores:
+
+- token metadata
+- tenant metadata for UI validation
+- `locked_paths` for that specific token
+
+The MCP runtime uses only the bearer token and its `jti` to load lock state. No tenant lookup is required at request time beyond the tenant embedded in the token claims.
+
 ## Storage Model
 
 The repository intentionally uses the filesystem as the primary store.
@@ -168,6 +191,7 @@ Inside each vault, the code uses a few hidden metadata files:
 
 - `.vault.json` for the vault marker
 - `.vault-locks.json` for lock state
+- `.mcp-token-locks.json` for token-specific mutable lock state
 - `.vault-index.json` for the stable file catalog
 
 ### Stable file IDs
@@ -375,6 +399,20 @@ Updates content, appends content, or moves the file path.
 #### `DELETE /api/files/[id]`
 
 Deletes a file or folder and removes its vector entries.
+
+### Vault lock routes
+
+#### `GET /api/vault/locks`
+
+Returns the currently locked paths in the vault. You can optionally pass `path` or `file_id` to scope the response to a subtree or specific item.
+
+#### `POST /api/vault/locks`
+
+Locks one or more paths. Request body accepts `path`, `file_id`, `paths`, or `file_ids`.
+
+#### `DELETE /api/vault/locks`
+
+Unlocks one or more paths. Request body accepts `path`, `file_id`, `paths`, or `file_ids`.
 
 ### Search and embed routes
 
@@ -586,6 +624,7 @@ This repo is nested under a directory that also contains another `pnpm-lock.yaml
 - [`app/lib/user_auth.ts`](./app/lib/user_auth.ts): user sessions and user authentication
 - [`app/api/auth/*`](./app/api/auth): login, logout, register, and session lookup
 - [`app/api/files/*`](./app/api/files): UI file tree and file editing endpoints
+- [`app/api/vault/locks`](./app/api/vault/locks): vault lock listing and lock control
 - [`app/api/search`](./app/api/search): UI search endpoint
 - [`app/api/embed`](./app/api/embed): embed proxy
 - [`app/api/mcp/token`](./app/api/mcp/token): UI-issued MCP token minting

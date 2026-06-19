@@ -34,7 +34,8 @@ type AuthStore = {
   users: AuthUser[];
 };
 
-const AUTH_STORE_PATH = process.env.USER_AUTH_STORE_PATH ?? path.join(process.cwd(), ".auth", "users.json");
+const AUTH_STORE_DIR = path.join(/*turbopackIgnore: true*/ process.cwd(), "data", "auth");
+const AUTH_STORE_PATH = process.env.USER_AUTH_STORE_PATH ?? path.join(AUTH_STORE_DIR, "users.json");
 const SESSION_SECRET = process.env.USER_AUTH_SECRET ?? process.env.MCP_JWT_SECRET;
 const SESSION_COOKIE_NAME = process.env.USER_SESSION_COOKIE ?? "brain_session";
 const SESSION_TTL_SECONDS = Number(process.env.USER_SESSION_TTL_SECONDS ?? String(60 * 60 * 24 * 30));
@@ -77,7 +78,7 @@ async function readStore(): Promise<AuthStore> {
 }
 
 async function writeStore(store: AuthStore): Promise<void> {
-  await fs.mkdir(path.dirname(AUTH_STORE_PATH), { recursive: true });
+  await fs.mkdir(AUTH_STORE_DIR, { recursive: true });
   const tmp = `${AUTH_STORE_PATH}.tmp`;
   await fs.writeFile(tmp, JSON.stringify(store, null, 2) + "\n", "utf8");
   await fs.rename(tmp, AUTH_STORE_PATH);

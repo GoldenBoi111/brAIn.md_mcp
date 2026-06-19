@@ -18,10 +18,38 @@ export type FileNode = { name: string; relativePath: string; kind: "file" | "fol
 
 type Catalog = { files: Record<string, { path: string; created_at: number; updated_at: number }>; paths: Record<string, string>; updated_at: number };
 
+type TokenLockRecord = {
+	tenant_id: string;
+	token_name: string;
+	subject: string;
+	scopes: string[];
+	read_roots: string[];
+	write_roots: string[];
+	locked_paths: string[];
+	created_at: number;
+	updated_at: number;
+	expires_at: number;
+};
+
+type TokenLockCatalog = { tokens: Record<string, TokenLockRecord>; updated_at: number };
+
+type TokenLockRegistration = {
+	tenantId: string;
+	tokenName: string;
+	subject: string;
+	scopes: string[];
+	readRoots: string[];
+	writeRoots: string[];
+	jwtId: string;
+	issuedAt: number;
+	expiresAt: number;
+};
+
 type QdrantPoint = { id: string; vector: number[]; payload: Record<string, unknown> };
 
-const DEFAULT_ROOT = path.join(process.cwd(), "vaults");
+const DEFAULT_ROOT = path.join(/*turbopackIgnore: true*/ process.cwd(), "vaults");
 const LOCK_FILE_NAME = ".vault-locks.json";
+const TOKEN_LOCK_FILE_NAME = ".mcp-token-locks.json";
 const CATALOG_FILE_NAME = ".vault-index.json";
 const ROOT_MARKER_NAME = ".vault.json";
 const MAX_VAULT_BYTES = 100 * 1024 * 1024;
@@ -247,6 +275,128 @@ async function saveLockManifest(vaultRoot: string, lockedPaths: Iterable<string>
 	await atomicWrite(path.join(vaultRoot, LOCK_FILE_NAME), JSON.stringify({ locked_paths: Array.from(new Set(Array.from(lockedPaths))).sort() }, null, 2) + "\n");
 }
 
+function tokenLockCatalogPath(): string {
+	return path.join(DEFAULT_ROOT, TOKEN_LOCK_FILE_NAME);
+}
+
+function normalizeLockedPathList(values: unknown): string[] {
+	if (!Array.isArray(values)) {
+		return [];
+	}
+	return Array.from(new Set(values.map((value) => normalizeRelPath(String(value))))).sort();
+}
+
+function normalizeTokenLockRecord(tokenId: string, value: Partial<TokenLockRecord> & { locked_paths?: unknown }): TokenLockRecord {
+	return {
+		tenant_id: String(value.tenant_id ?? ""),
+		token_name: String(value.token_name ?? ""),
+		subject: String(value.subject ?? ""),
+		scopes: Array.isArray(value.scopes) ? value.scopes.map(String) : [],
+		read_roots: Array.isArray(value.read_roots) ? value.read_roots.map(String) : [],
+		write_roots: Array.isArray(value.write_roots) ? value.write_roots.map(String) : [],
+		locked_paths: normalizeLockedPathList(value.locked_paths),
+		created_at: Number(value.created_at ?? nowSeconds()),
+		updated_at: Number(value.updated_at ?? nowSeconds()),
+		expires_at: Number(value.expires_at ?? 0),
+	};
+}
+
+async function loadTokenLockCatalog(): Promise<TokenLockCatalog> {
+	const data = (await readJson<Record<string, unknown>>(tokenLockCatalogPath())) as Record<string, unknown>;
+	const tokens = data.tokens;
+	if (!tokens || typeof tokens !== "object") {
+		return { tokens: {}, updated_at: nowSeconds() };
+	}
+	const catalog: TokenLockCatalog = { tokens: {}, updated_at: Number(data.updated_at ?? nowSeconds()) };
+	for (const [tokenId, value] of Object.entries(tokens as Record<string, unknown>)) {
+		if (value && typeof value === "object") {
+			catalog.tokens[tokenId] = normalizeTokenLockRecord(tokenId, value as Partial<TokenLockRecord> & { locked_paths?: unknown });
+		}
+	}
+	return catalog;
+}
+
+async function saveTokenLockCatalog(catalog: TokenLockCatalog): Promise<void> {
+	await atomicWrite(
+		tokenLockCatalogPath(),
+		JSON.stringify(
+			{
+				tokens: catalog.tokens,
+				updated_at: nowSeconds(),
+			},
+			null,
+			2
+		) + "\n"
+	);
+}
+
+export async function loadTokenLockRecord(tokenId: string): Promise<TokenLockRecord | null> {
+	const catalog = await loadTokenLockCatalog();
+	const record = catalog.tokens[tokenId];
+	return record ? normalizeTokenLockRecord(tokenId, record) : null;
+}
+
+export async function registerTokenLockRecord(options: TokenLockRegistration): Promise<TokenLockRecord> {
+	const catalog = await loadTokenLockCatalog();
+	const existing = catalog.tokens[options.jwtId];
+	const record = normalizeTokenLockRecord(options.jwtId, {
+		tenant_id: options.tenantId,
+		token_name: options.tokenName,
+		subject: options.subject,
+		scopes: options.scopes,
+		read_roots: options.readRoots,
+		write_roots: options.writeRoots,
+		locked_paths: existing?.locked_paths ?? [],
+		created_at: existing?.created_at ?? options.issuedAt,
+		updated_at: nowSeconds(),
+		expires_at: options.expiresAt,
+	});
+	catalog.tokens[options.jwtId] = record;
+	await saveTokenLockCatalog(catalog);
+	return record;
+}
+
+export async function getTokenLockedPaths(tokenId: string): Promise<string[]> {
+	const record = await loadTokenLockRecord(tokenId);
+	return record?.locked_paths ?? [];
+}
+
+export async function lockTokenPath(tokenId: string, relativePath: string): Promise<boolean> {
+	const rel = normalizeRelPath(relativePath);
+	const catalog = await loadTokenLockCatalog();
+	const existing = catalog.tokens[tokenId];
+	if (!existing) {
+		throw new BackendError(`Unknown token lock record: ${tokenId}`, 404);
+	}
+	const record = normalizeTokenLockRecord(tokenId, existing);
+	if (record.locked_paths.includes(rel)) {
+		return false;
+	}
+	record.locked_paths = Array.from(new Set([...record.locked_paths, rel])).sort();
+	record.updated_at = nowSeconds();
+	catalog.tokens[tokenId] = record;
+	await saveTokenLockCatalog(catalog);
+	return true;
+}
+
+export async function unlockTokenPath(tokenId: string, relativePath: string): Promise<boolean> {
+	const rel = normalizeRelPath(relativePath);
+	const catalog = await loadTokenLockCatalog();
+	const existing = catalog.tokens[tokenId];
+	if (!existing) {
+		throw new BackendError(`Unknown token lock record: ${tokenId}`, 404);
+	}
+	const record = normalizeTokenLockRecord(tokenId, existing);
+	if (!record.locked_paths.includes(rel)) {
+		return false;
+	}
+	record.locked_paths = record.locked_paths.filter((item) => item !== rel).sort();
+	record.updated_at = nowSeconds();
+	catalog.tokens[tokenId] = record;
+	await saveTokenLockCatalog(catalog);
+	return true;
+}
+
 function isLocked(relKey: string, locks: Set<string>): boolean {
 	if (!relKey || relKey === ".") {
 		return locks.has(".") || locks.has("");
@@ -260,6 +410,10 @@ function isLocked(relKey: string, locks: Set<string>): boolean {
 		}
 	}
 	return false;
+}
+
+export function isPathLocked(relativePath: string, locks: Set<string>): boolean {
+	return isLocked(normalizeRelPath(relativePath), locks);
 }
 
 function assertUnlocked(relKey: string, locks: Set<string>): void {
@@ -738,13 +892,26 @@ export async function issueToken(options: { tenantId: string; tokenName: string;
 	let writeRoots = options.writeRoots ?? null;
 	if (!readRoots && writeRoots) readRoots = [...writeRoots];
 	if (!writeRoots && readRoots) writeRoots = [...readRoots];
-	const payload: Record<string, unknown> = { iss: options.issuer ?? defaultIssuer(), aud: options.audience ?? defaultAudience(), sub: options.subject, tenant_id: options.tenantId, token_name: options.tokenName, scopes: options.scopes, jti: randomUUID(), iat: now, nbf: now, exp: now + (options.ttlDays ?? 365) * 24 * 60 * 60, v: 1 };
+	const jwtId = randomUUID();
+	const payload: Record<string, unknown> = { iss: options.issuer ?? defaultIssuer(), aud: options.audience ?? defaultAudience(), sub: options.subject, tenant_id: options.tenantId, token_name: options.tokenName, scopes: options.scopes, jti: jwtId, iat: now, nbf: now, exp: now + (options.ttlDays ?? 365) * 24 * 60 * 60, v: 1 };
 	if (readRoots?.length) payload.read_roots = readRoots;
 	if (writeRoots?.length) payload.write_roots = writeRoots;
 	const header = { alg: "HS256", typ: "JWT" };
 	const signingInput = `${base64UrlEncode(canonicalJson(header))}.${base64UrlEncode(canonicalJson(payload))}`;
 	const signature = sign(jwtSecret(), Buffer.from(signingInput, "ascii"));
-	return `${signingInput}.${base64UrlEncode(signature)}`;
+	const token = `${signingInput}.${base64UrlEncode(signature)}`;
+	await registerTokenLockRecord({
+		tenantId: options.tenantId,
+		tokenName: options.tokenName,
+		subject: options.subject,
+		scopes: options.scopes,
+		readRoots: readRoots ?? [],
+		writeRoots: writeRoots ?? [],
+		jwtId,
+		issuedAt: now,
+		expiresAt: Number(payload.exp),
+	});
+	return token;
 }
 
 export async function verifyToken(token: string): Promise<TokenClaims> {

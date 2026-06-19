@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { BackendError, issueToken } from "../../../lib/backend";
+import { BackendError, issueToken, verifyToken } from "../../../lib/backend";
 import { requireUserSession } from "../../../lib/user_auth";
 
 export const runtime = "nodejs";
@@ -32,8 +32,9 @@ export async function POST(request: Request) {
       issuer: body?.issuer ? String(body.issuer) : undefined,
       audience: body?.audience ? String(body.audience) : undefined,
     });
+    const claims = await verifyToken(token);
 
-    return NextResponse.json({ token });
+    return NextResponse.json({ token, token_id: claims.jwtId, token_name: claims.tokenName, tenant_id: claims.tenantId });
   } catch (error) {
     return errorResponse(error);
   }
@@ -51,6 +52,7 @@ export async function GET() {
       readRoots: ["folder"],
       writeRoots: ["folder"],
       ttlDays: 365,
+      token_id: "returned in response",
     },
   });
 }
