@@ -1,8 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  outputFileTracingRoot: process.cwd(),
+  outputFileTracingRoot: "C:/Repos/brAIn.md MCP Server",
   turbopack: {
-    root: process.cwd(),
+    root: "C:/Repos/brAIn.md MCP Server",
   },
 };
 

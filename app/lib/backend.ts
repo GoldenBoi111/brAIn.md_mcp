@@ -1,16 +1,9 @@
-﻿import { createHmac, randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { BackendError } from "./errors";
 
-export class BackendError extends Error {
-	status: number;
-
-	constructor(message: string, status = 400) {
-		super(message);
-		this.name = "BackendError";
-		this.status = status;
-	}
-}
+export { BackendError };
 
 export type TokenClaims = { tenantId: string; tokenName: string; subject: string; scopes: string[]; readRoots: string[]; writeRoots: string[]; jwtId: string; issuedAt: number; expiresAt: number; issuer: string; audience: string };
 
@@ -359,6 +352,13 @@ export async function registerTokenLockRecord(options: TokenLockRegistration): P
 export async function getTokenLockedPaths(tokenId: string): Promise<string[]> {
 	const record = await loadTokenLockRecord(tokenId);
 	return record?.locked_paths ?? [];
+}
+
+export async function listTokenLockRecords(): Promise<Array<{ token_id: string } & TokenLockRecord>> {
+	const catalog = await loadTokenLockCatalog();
+	return Object.entries(catalog.tokens)
+		.map(([tokenId, record]) => ({ token_id: tokenId, ...normalizeTokenLockRecord(tokenId, record) }))
+		.sort((a, b) => b.updated_at - a.updated_at);
 }
 
 export async function lockTokenPath(tokenId: string, relativePath: string): Promise<boolean> {

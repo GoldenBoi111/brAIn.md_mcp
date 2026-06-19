@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, randomUUID, pbkdf2Sync, timingSafeEqual } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { BackendError } from "./backend";
+import { BackendError } from "./errors";
 
 type AuthRole = "user" | "admin";
 
@@ -34,8 +34,6 @@ type AuthStore = {
   users: AuthUser[];
 };
 
-const AUTH_STORE_DIR = path.join(/*turbopackIgnore: true*/ process.cwd(), "data", "auth");
-const AUTH_STORE_PATH = process.env.USER_AUTH_STORE_PATH ?? path.join(AUTH_STORE_DIR, "users.json");
 const SESSION_SECRET = process.env.USER_AUTH_SECRET ?? process.env.MCP_JWT_SECRET;
 const SESSION_COOKIE_NAME = process.env.USER_SESSION_COOKIE ?? "brain_session";
 const SESSION_TTL_SECONDS = Number(process.env.USER_SESSION_TTL_SECONDS ?? String(60 * 60 * 24 * 30));
@@ -65,8 +63,9 @@ function nowSeconds(): number {
 }
 
 async function readStore(): Promise<AuthStore> {
+  const authStorePath = process.env.USER_AUTH_STORE_PATH ?? "C:\\tmp\\brAIn.md MCP Server\\auth\\users.json";
   try {
-    const raw = await fs.readFile(AUTH_STORE_PATH, "utf8");
+    const raw = await fs.readFile(authStorePath, "utf8");
     const parsed = JSON.parse(raw) as Partial<AuthStore>;
     return { users: Array.isArray(parsed.users) ? parsed.users as AuthUser[] : [] };
   } catch (error: any) {
@@ -78,10 +77,17 @@ async function readStore(): Promise<AuthStore> {
 }
 
 async function writeStore(store: AuthStore): Promise<void> {
-  await fs.mkdir(AUTH_STORE_DIR, { recursive: true });
-  const tmp = `${AUTH_STORE_PATH}.tmp`;
+  const authStoreDir = process.env.USER_AUTH_STORE_DIR ?? "C:\\tmp\\brAIn.md MCP Server\\auth";
+  const authStorePath = process.env.USER_AUTH_STORE_PATH ?? "C:\\tmp\\brAIn.md MCP Server\\auth\\users.json";
+  await fs.mkdir(authStoreDir, { recursive: true });
+  const tmp = `${authStorePath}.tmp`;
   await fs.writeFile(tmp, JSON.stringify(store, null, 2) + "\n", "utf8");
-  await fs.rename(tmp, AUTH_STORE_PATH);
+  await fs.rename(tmp, authStorePath);
+}
+
+function safeUser(user: AuthUser): Omit<AuthUser, "passwordHash"> {
+  const { passwordHash: _passwordHash, ...safe } = user;
+  return safe;
 }
 
 function normalizeEmail(email: string): string {
@@ -200,8 +206,7 @@ export async function registerUser(input: { email: string; password: string; nam
     expiresAt: now + SESSION_TTL_SECONDS,
   });
 
-  const { passwordHash: _passwordHash, ...safeUser } = user;
-  return { user: safeUser, sessionToken };
+  return { user: safeUser(user), sessionToken };
 }
 
 export async function loginUser(input: { email: string; password: string }): Promise<{ user: Omit<AuthUser, "passwordHash">; sessionToken: string }> {
@@ -223,8 +228,18 @@ export async function loginUser(input: { email: string; password: string }): Pro
     issuedAt: now,
     expiresAt: now + SESSION_TTL_SECONDS,
   });
-  const { passwordHash: _passwordHash, ...safeUser } = user;
-  return { user: safeUser, sessionToken };
+  return { user: safeUser(user), sessionToken };
+}
+
+export async function listUsers(): Promise<Omit<AuthUser, "passwordHash">[]> {
+  const store = await readStore();
+  return store.users.map((user) => safeUser(user));
+}
+
+export async function getUserById(userId: string): Promise<Omit<AuthUser, "passwordHash"> | null> {
+  const store = await readStore();
+  const user = store.users.find((entry) => entry.id === userId);
+  return user ? safeUser(user) : null;
 }
 
 export function verifySessionToken(token: string): AuthSessionClaims {
@@ -287,3 +302,4 @@ export function clearSessionCookie(): string {
   const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
   return `${SESSION_COOKIE_NAME}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0${secure}`;
 }
+

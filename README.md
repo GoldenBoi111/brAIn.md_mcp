@@ -67,9 +67,17 @@ Routes:
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
 - `POST /api/mcp/token`
+- `GET /api/health`
+- `GET /api/openapi`
+- `GET /api/tokens`
+- `POST /api/tokens`
+- `GET /api/users`
+- `POST /api/users`
 - `GET /api/mcp/token/[tokenId]/locks`
 - `POST /api/mcp/token/[tokenId]/locks`
 - `DELETE /api/mcp/token/[tokenId]/locks`
+- `GET /api/vault/usage`
+- `POST /api/vault/reindex`
 - `GET /api/files`
 - `POST /api/files`
 - `GET /api/files/[id]`
@@ -193,6 +201,17 @@ Inside each vault, the code uses a few hidden metadata files:
 - `.vault-locks.json` for lock state
 - `.mcp-token-locks.json` for token-specific mutable lock state
 - `.vault-index.json` for the stable file catalog
+
+### API versioning
+
+The API exposes an unversioned compatibility surface at `/api` and a versioned rewrite surface at `/api/v1`.
+
+The versioned path rewrites to the same handlers, so these both work:
+
+- `/api/health`
+- `/api/v1/health`
+
+The generated OpenAPI document is available at `/api/openapi`.
 
 ### Stable file IDs
 
