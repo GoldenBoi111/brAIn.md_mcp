@@ -27,7 +27,6 @@ RUN mkdir -p /app/vaults /app/.auth
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml ./
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
-COPY public ./public
 
 EXPOSE 3000
 
