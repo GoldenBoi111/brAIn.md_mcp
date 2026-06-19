@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>brAIn.md MCP Server API Reference</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f1e8;
+      --panel: #fffdf8;
+      --panel-alt: #f8f5ee;
+      --text: #1f2328;
+      --muted: #5d6773;
+      --border: #d8d0c3;
+      --accent: #2549a6;
+      --accent-soft: #dbe6ff;
+      --accent-2: #0f766e;
+      --warning: #8a4f00;
+      --shadow: 0 10px 30px rgba(31, 35, 40, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(37, 73, 166, 0.09), transparent 30%),
+        radial-gradient(circle at top right, rgba(15, 118, 110, 0.08), transparent 26%),
+        var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .wrap {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 32px 20px 64px;
+    }
+
+    .hero {
+      background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0.76));
+      border: 1px solid rgba(216, 208, 195, 0.85);
+      border-radius: 24px;
+      padding: 28px 28px 22px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
+    }
+
+    h1, h2, h3 {
+      line-height: 1.2;
+      margin: 0 0 12px;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 4vw, 3.2rem);
+      letter-spacing: -0.03em;
+    }
+
+    h2 {
+      margin-top: 40px;
+      font-size: 1.55rem;
+      letter-spacing: -0.02em;
+    }
+
+    h3 {
+      margin-top: 28px;
+      font-size: 1.15rem;
+    }
+
+    p { margin: 0 0 12px; }
+
+    .lead {
+      max-width: 90ch;
+      color: var(--muted);
+      font-size: 1.02rem;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .meta-card, .section-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .meta-card {
+      padding: 16px 18px;
+    }
+
+    .meta-card strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--accent);
+    }
+
+    .section-card {
+      padding: 20px;
+      margin-top: 16px;
+    }
+
+    .toc {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .toc a {
+      display: block;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--panel-alt);
+      color: var(--text);
+      text-decoration: none;
+      transition: transform 120ms ease, border-color 120ms ease;
+    }
+
+    .toc a:hover {
+      transform: translateY(-1px);
+      border-color: rgba(37, 73, 166, 0.45);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 0;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #fff;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      text-align: left;
+      font-size: 0.95rem;
+    }
+
+    th {
+      background: #f3efe6;
+      color: #2d333b;
+      font-weight: 700;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    code {
+      background: #f3efe6;
+      border: 1px solid #e1d9cc;
+      border-radius: 6px;
+      padding: 0.1rem 0.35rem;
+    }
+
+    pre {
+      margin: 14px 0 0;
+      padding: 14px 16px;
+      background: #111827;
+      color: #e5e7eb;
+      border-radius: 14px;
+      overflow: auto;
+      border: 1px solid #273244;
+      box-shadow: var(--shadow);
+    }
+
+    pre code {
+      background: none;
+      border: 0;
+      padding: 0;
+      color: inherit;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 0.16rem 0.55rem;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 0.84rem;
+      font-weight: 700;
+      margin-right: 0.35rem;
+    }
+
+    .method {
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+
+    .method.get { color: #0f766e; }
+    .method.post { color: #2549a6; }
+    .method.put { color: #8a4f00; }
+    .method.delete { color: #991b1b; }
+
+    .endpoint {
+      padding-top: 8px;
+      scroll-margin-top: 18px;
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 0.93rem;
+    }
+
+    .note {
+      border-left: 4px solid var(--accent-2);
+      background: rgba(15, 118, 110, 0.06);
+      padding: 12px 14px;
+      border-radius: 10px;
+      margin-top: 12px;
+      color: #20474a;
+    }
+
+    .warn {
+      border-left: 4px solid #f59e0b;
+      background: rgba(245, 158, 11, 0.09);
+      padding: 12px 14px;
+      border-radius: 10px;
+      margin-top: 12px;
+      color: #6b3f00;
+    }
+
+    ul {
+      margin: 10px 0 0 20px;
+    }
+
+    li { margin: 4px 0; }
+
+    .foot {
+      margin-top: 40px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    @media (max-width: 720px) {
+      .wrap { padding: 18px 12px 40px; }
+      .hero, .section-card { padding: 16px; border-radius: 16px; }
+      table, th, td { font-size: 0.9rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="pill">API Reference</div>
+      <h1>brAIn.md MCP Server Backend API</h1>
+      <p class="lead">
+        This document lists every backend API endpoint currently exposed by the Next.js server, how the UI should call it,
+        which parameters it accepts, and what each route returns. It is intended as the human-friendly companion to
+        <code>/api/openapi</code>.
+      </p>
+
+      <div class="meta-grid">
+        <div class="meta-card">
+          <strong>Base paths</strong>
+          <div><code>/api</code> and <code>/api/v1</code></div>
+        </div>
+        <div class="meta-card">
+          <strong>Default auth cookie</strong>
+          <div><code>brain_session</code> unless overridden by env</div>
+        </div>
+        <div class="meta-card">
+          <strong>Machine-readable spec</strong>
+          <div><code>GET /api/openapi</code></div>
+        </div>
+        <div class="meta-card">
+          <strong>Versioning</strong>
+          <div><code>/api/v1/*</code> rewrites to <code>/api/*</code></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-card">
+      <h2>How To Read This Doc</h2>
+      <ul>
+        <li><strong>GET</strong> routes use query parameters when they need filters or scopes.</li>
+        <li><strong>POST</strong>, <strong>PUT</strong>, and <strong>DELETE</strong> routes expect JSON request bodies unless the section says otherwise.</li>
+        <li>Unless noted, successful responses are JSON and errors follow <code>{ "error": "..." }</code>.</li>
+        <li>Session-protected routes use the <code>brain_session</code> cookie set by login/register.</li>
+        <li>Token-management routes operate on the current tenant unless the route includes a specific <code>{tokenId}</code>.</li>
+      </ul>
+    </section>
+
+    <section class="section-card">
+      <h2>Versioning And Response Rules</h2>
+      <p class="small">
+        The app exposes a compatibility surface at <code>/api</code> and a versioned surface at <code>/api/v1</code>.
+        The <code>proxy.ts</code> rewrite maps <code>/api/v1/*</code> to the same handlers, so the UI can pin to a
+        versioned root without changing backend behavior.
+      </p>
+      <div class="note">
+        Recommended UI convention: prefer <code>/api/v1</code> for new code paths, but keep <code>/api</code> support
+        for older links or local tooling.
+      </div>
+      <div class="warn">
+        All mutation endpoints return JSON error objects on failure. The UI should always check <code>response.ok</code>
+        before assuming the returned JSON is a success payload.
+      </div>
+    </section>
+
+    <section class="section-card">
+      <h2>Endpoint Index</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>Path</th>
+            <th>Auth</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="method get">GET</td><td><code>/api</code></td><td>None</td><td>API index and version root.</td></tr>
+          <tr><td class="method get">GET</td><td><code>/api/health</code></td><td>None</td><td>Basic health and dependency status.</td></tr>
+          <tr><td class="method get">GET</td><td><code>/api/openapi</code></td><td>None</td><td>Generated OpenAPI 3.1 document.</td></tr>
+          <tr><td class="method post">POST</td><td><code>/api/auth/register</code></td><td>None</td><td>Create a local auth user and session.</td></tr>
+          <tr><td class="method post">POST</td><td><code>/api/auth/login</code></td><td>None</td><td>Authenticate and return a session cookie.</td></tr>
+          <tr><td class="method post">POST</td><td><code>/api/auth/logout</code></td><td>None</td><td>Clear the session cookie.</td></tr>
+          <tr><td class="method get">GET</td><td><code>/api/auth/me</code></td><td>Session</td><td>Return current session claims.</td></tr>
+          <tr><td class="method get">GET</td><td><code>/api/embed</code></td><td>None</td><td>Describe embed request format.</td></tr>
+          <tr><td class="method post">POST</td><td><code>/api/embed</code></td><td>Session</td><td>Create embedding vectors.</td></tr>
+          <tr><td class="method get">GET</td><td><code>/api/search</code></td><td>None</td><td>Describe search request format.</td></tr>
+          <tr><td class="method post">POST</td><td><code>/api/search</code></td><td>Session</td><td>Run semantic search.</td></tr>
+          <tr><td class="method get">GET</td><td><code>/api/files</code></td><td>Session</td><td>Browse a vault path.</td></tr>
+          <tr><td class="method post">POST</td><td><code>/api/files</code></td><td>Session</td><td>Create a file or folder.</td></tr>
+          <tr><td class="method get">GET</td><td><code>/api/files/{id}</code></td><td>Session</td><td>Read file metadata and content.</td></tr>
+          <tr><td class="method put">PUT</td><td><code>/api/files/{id}</code></td><td>Session</td><td>Move or update a file.</td></tr>
+          <tr><td class="method delete">DELETE</td><td><code>/api/files/{id}</code></td><td>Session</td><td>Delete a file or folder.</td></tr>
+          <tr><td class="method get">GET</td><td><code>/api/vault/locks</code></td><td>Session</td><td>List visible vault locks.</td></tr>
+          <tr><td class="method post">POST</td><td><code>/api/vault/locks</code></td><td>Session</td><td>Lock one or more vault paths.</td></tr>
+          <tr><td class="method delete">DELETE</td><td><code>/api/vault/locks</code></td><td>Session</td><td>Unlock one or more vault paths.</td></tr>
+          <tr><td class="method get">GET</td><td><code>/api/vault/usage</code></td><td>Session</td><td>Report vault usage and quota.</td></tr>
+          <tr><td class="method post">POST</td><td><code>/api/vault/reindex</code></td><td>Session</td><td>Rebuild embeddings for a subtree.</td></tr>
+          <tr><td class="method get">GET</td><td><code>/api/tokens</code></td><td>Session</td><td>List tenant tokens.</td></tr>
+          <tr><td class="method post">POST</td><td><code>/api/tokens</code></td><td>Session</td><td>Create a tenant token.</td></tr>
+          <tr><td class="method post">POST</td><td><code>/api/mcp/token</code></td><td>Session</td><td>Create an MCP token.</td></tr>
+          <tr><td class="method get">GET</td><td><code>/api/mcp/token/{tokenId}/locks</code></td><td>Session</td><td>Read token-scoped mutable locks.</td></tr>
+          <tr><td class="method post">POST</td><td><code>/api/mcp/token/{tokenId}/locks</code></td><td>Session</td><td>Add token-scoped mutable locks.</td></tr>
+          <tr><td class="method delete">DELETE</td><td><code>/api/mcp/token/{tokenId}/locks</code></td><td>Session</td><td>Remove token-scoped mutable locks.</td></tr>
+          <tr><td class="method get">GET</td><td><code>/api/users</code></td><td>Admin session</td><td>List local users.</td></tr>
+          <tr><td class="method post">POST</td><td><code>/api/users</code></td><td>Admin session</td><td>Create a local user.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section-card endpoint" id="api">
+      <h2><code>GET /api</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>None</td></tr>
+          <tr><td>Purpose</td><td>Return the top-level API index and versioned root.</td></tr>
+          <tr><td>Request parameters</td><td>None</td></tr>
+          <tr><td>Response</td><td><code>{ name, api_version, versioned_root, routes[] }</code></td></tr>
+        </tbody>
+      </table>
+      <p class="small">The routes array currently lists the core UI-facing endpoints under the version root.</p>
+      <pre><code>{
+  "name": "brAIn.md MCP Server API",
+  "api_version": "v1",
+  "versioned_root": "/api/v1",
+  "routes": ["/health", "/vault/locks", "/vault/usage", "/vault/reindex", "/tokens", "/users", "/openapi"]
+}</code></pre>
+    </section>
+
+    <section class="section-card endpoint" id="health">
+      <h2><code>GET /api/health</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>None</td></tr>
+          <tr><td>Purpose</td><td>Report backend health and basic dependency availability.</td></tr>
+          <tr><td>Request parameters</td><td>None</td></tr>
+          <tr><td>Response</td><td><code>{ status, api_version, services }</code></td></tr>
+        </tbody>
+      </table>
+      <p class="small">The <code>services</code> object includes <code>api</code>, <code>auth</code>, <code>vault</code>, <code>qdrant</code>, and <code>embedder</code>.</p>
+    </section>
+
+    <section class="section-card endpoint" id="openapi">
+      <h2><code>GET /api/openapi</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>None</td></tr>
+          <tr><td>Purpose</td><td>Return the generated OpenAPI 3.1 document.</td></tr>
+          <tr><td>Request parameters</td><td>None</td></tr>
+          <tr><td>Response</td><td>A JSON OpenAPI document.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section-card endpoint" id="auth-register">
+      <h2><code>POST /api/auth/register</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>None</td></tr>
+          <tr><td>Purpose</td><td>Create a local user account and return a session cookie.</td></tr>
+          <tr><td>Content-Type</td><td><code>application/json</code></td></tr>
+          <tr><td>Required body fields</td><td><code>email</code>, <code>password</code></td></tr>
+          <tr><td>Optional body fields</td><td><code>name</code>, <code>role</code> (admin only when supported)</td></tr>
+          <tr><td>Response</td><td><code>{ user }</code> and a <code>Set-Cookie</code> header</td></tr>
+        </tbody>
+      </table>
+      <pre><code>{
+  "email": "user@example.com",
+  "password": "secret",
+  "name": "Sam",
+  "role": "admin"
+}</code></pre>
+    </section>
+
+    <section class="section-card endpoint" id="auth-login">
+      <h2><code>POST /api/auth/login</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>None</td></tr>
+          <tr><td>Purpose</td><td>Authenticate a local user and return a session cookie.</td></tr>
+          <tr><td>Content-Type</td><td><code>application/json</code></td></tr>
+          <tr><td>Required body fields</td><td><code>email</code>, <code>password</code></td></tr>
+          <tr><td>Response</td><td><code>{ user }</code> and a <code>Set-Cookie</code> header</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section-card endpoint" id="auth-logout">
+      <h2><code>POST /api/auth/logout</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>None required, but it clears the current session if present.</td></tr>
+          <tr><td>Purpose</td><td>Log the UI out by clearing the session cookie.</td></tr>
+          <tr><td>Request parameters</td><td>None</td></tr>
+          <tr><td>Response</td><td><code>{ logged_out: true }</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section-card endpoint" id="auth-me">
+      <h2><code>GET /api/auth/me</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>Return the current authenticated session claims.</td></tr>
+          <tr><td>Request parameters</td><td>None</td></tr>
+          <tr><td>Response</td><td><code>{ user }</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section-card endpoint" id="embed-get">
+      <h2><code>GET /api/embed</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>None</td></tr>
+          <tr><td>Purpose</td><td>Describe the embed request shape for UI help/debugging.</td></tr>
+          <tr><td>Request parameters</td><td>None</td></tr>
+          <tr><td>Response</td><td>Documentation object with <code>route</code>, <code>method</code>, <code>auth</code>, and <code>body</code>.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section-card endpoint" id="embed-post">
+      <h2><code>POST /api/embed</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>Embed a single string or batch of strings.</td></tr>
+          <tr><td>Content-Type</td><td><code>application/json</code></td></tr>
+          <tr><td>Required body fields</td><td>Either <code>text</code> or <code>texts[]</code></td></tr>
+          <tr><td>Optional body fields</td><td><code>include_metadata</code></td></tr>
+          <tr><td>Response</td><td><code>{ vectors, model_name, dimension, metadata? }</code></td></tr>
+        </tbody>
+      </table>
+      <pre><code>{
+  "texts": ["first chunk", "second chunk"],
+  "include_metadata": true
+}</code></pre>
+    </section>
+
+    <section class="section-card endpoint" id="search-get">
+      <h2><code>GET /api/search</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>None</td></tr>
+          <tr><td>Purpose</td><td>Describe the search request shape for UI help/debugging.</td></tr>
+          <tr><td>Request parameters</td><td>None</td></tr>
+          <tr><td>Response</td><td>Documentation object with <code>route</code>, <code>method</code>, <code>auth</code>, and <code>body</code>.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section-card endpoint" id="search-post">
+      <h2><code>POST /api/search</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>Run semantic search against the tenant vault.</td></tr>
+          <tr><td>Content-Type</td><td><code>application/json</code></td></tr>
+          <tr><td>Required body fields</td><td><code>query</code></td></tr>
+          <tr><td>Optional body fields</td><td><code>top_k</code> or <code>topK</code></td></tr>
+          <tr><td>Response</td><td><code>{ tenant_id, query, top_k, matches[] }</code></td></tr>
+        </tbody>
+      </table>
+      <p class="small">The server caps <code>top_k</code> at 50 and ignores matches that fall outside the current token's readable roots.</p>
+    </section>
+
+    <section class="section-card endpoint" id="files-get">
+      <h2><code>GET /api/files</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>Return either a tree snapshot or a flat folder listing.</td></tr>
+          <tr><td>Query parameters</td><td><code>path</code> (default <code>.</code>), <code>view</code> (<code>tree</code> or <code>list</code>, default <code>tree</code>)</td></tr>
+          <tr><td>Response</td><td><code>{ tenant_id, path, view, locked_paths[], usage_bytes, max_bytes, data }</code></td></tr>
+        </tbody>
+      </table>
+      <p class="small"><code>data</code> is either a tree node object or a flat array of list items, depending on <code>view</code>.</p>
+    </section>
+
+    <section class="section-card endpoint" id="files-post">
+      <h2><code>POST /api/files</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>Create a file or folder in the vault.</td></tr>
+          <tr><td>Content-Type</td><td><code>application/json</code></td></tr>
+          <tr><td>Required body fields</td><td><code>path</code></td></tr>
+          <tr><td>Optional body fields</td><td><code>kind</code>, <code>content</code>, <code>embedding_model</code></td></tr>
+          <tr><td>Response</td><td>Folder: <code>{ created, kind, path }</code>. File: <code>{ created, kind, path, file_id, content }</code>.</td></tr>
+        </tbody>
+      </table>
+      <pre><code>{
+  "kind": "file",
+  "path": "notes/intro.md",
+  "content": "# Hello"
+}</code></pre>
+    </section>
+
+    <section class="section-card endpoint" id="files-id-get">
+      <h2><code>GET /api/files/{id}</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>Read a file or folder by stable file id.</td></tr>
+          <tr><td>Path parameter</td><td><code>id</code> = file id</td></tr>
+          <tr><td>Response</td><td>Metadata object plus <code>content</code> for files, <code>null</code> for folders.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section-card endpoint" id="files-id-put">
+      <h2><code>PUT /api/files/{id}</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>Move a file or replace/append file contents.</td></tr>
+          <tr><td>Path parameter</td><td><code>id</code> = file id</td></tr>
+          <tr><td>Content-Type</td><td><code>application/json</code></td></tr>
+          <tr><td>Optional body fields</td><td><code>path</code>, <code>content</code>, <code>append</code>, <code>embedding_model</code></td></tr>
+          <tr><td>Response</td><td><code>{ updated, file_id, path, metadata, content }</code></td></tr>
+        </tbody>
+      </table>
+      <p class="small">If <code>content</code> is omitted, the route only performs a move operation when <code>path</code> changes.</p>
+    </section>
+
+    <section class="section-card endpoint" id="files-id-delete">
+      <h2><code>DELETE /api/files/{id}</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>Delete a file or folder and its vector records.</td></tr>
+          <tr><td>Path parameter</td><td><code>id</code> = file id</td></tr>
+          <tr><td>Response</td><td><code>{ deleted, file_id, path }</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section-card endpoint" id="vault-locks-get">
+      <h2><code>GET /api/vault/locks</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>List lock entries visible to the current session.</td></tr>
+          <tr><td>Query parameters</td><td><code>path</code> (default <code>.</code>) or <code>file_id</code></td></tr>
+          <tr><td>Response</td><td><code>{ tenant_id, scope_path, count, locked_paths[] }</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section-card endpoint" id="vault-locks-post">
+      <h2><code>POST /api/vault/locks</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>Add one or more vault-wide locks.</td></tr>
+          <tr><td>Content-Type</td><td><code>application/json</code></td></tr>
+          <tr><td>Accepted body fields</td><td><code>path</code>, <code>paths[]</code>, <code>file_id</code>, <code>file_ids[]</code></td></tr>
+          <tr><td>Response</td><td><code>{ tenant_id, action, count, changed, results[], locked_paths[] }</code></td></tr>
+        </tbody>
+      </table>
+      <p class="small">The server resolves file ids to paths before applying the lock. Each mutation result reports whether the lock state actually changed.</p>
+    </section>
+
+    <section class="section-card endpoint" id="vault-locks-delete">
+      <h2><code>DELETE /api/vault/locks</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>Remove one or more vault-wide locks.</td></tr>
+          <tr><td>Content-Type</td><td><code>application/json</code></td></tr>
+          <tr><td>Accepted body fields</td><td><code>path</code>, <code>paths[]</code>, <code>file_id</code>, <code>file_ids[]</code></td></tr>
+          <tr><td>Response</td><td><code>{ tenant_id, action, count, changed, results[], locked_paths[] }</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section-card endpoint" id="vault-usage">
+      <h2><code>GET /api/vault/usage</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>Return vault usage and quota status.</td></tr>
+          <tr><td>Query parameters</td><td><code>path</code> (default <code>.</code>), <code>view</code> (<code>tree</code> or <code>list</code>)</td></tr>
+          <tr><td>Response</td><td><code>{ api_version, tenant_id, path, view, usage_bytes, max_bytes }</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section-card endpoint" id="vault-reindex">
+      <h2><code>POST /api/vault/reindex</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>Rebuild embeddings for a subtree of the vault.</td></tr>
+          <tr><td>Content-Type</td><td><code>application/json</code></td></tr>
+          <tr><td>Accepted body fields</td><td><code>path</code>, <code>embedding_model</code> or <code>embeddingModel</code></td></tr>
+          <tr><td>Response</td><td><code>{ api_version, tenant_id, path, count, skipped, results[] }</code></td></tr>
+        </tbody>
+      </table>
+      <p class="small">The server defaults the path to <code>.</code> and the embedding model to <code>jasper-token-compression-600m</code> when not supplied.</p>
+    </section>
+
+    <section class="section-card endpoint" id="tokens-get">
+      <h2><code>GET /api/tokens</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>List all token lock records for the current tenant.</td></tr>
+          <tr><td>Request parameters</td><td>None</td></tr>
+          <tr><td>Response</td><td><code>{ api_version, tenant_id, count, tokens[] }</code></td></tr>
+        </tbody>
+      </table>
+      <p class="small">This route returns token records, not the raw secret token value.</p>
+    </section>
+
+    <section class="section-card endpoint" id="tokens-post">
+      <h2><code>POST /api/tokens</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>Create a new tenant token.</td></tr>
+          <tr><td>Content-Type</td><td><code>application/json</code></td></tr>
+          <tr><td>Required body fields</td><td><code>subject</code></td></tr>
+          <tr><td>Common body fields</td><td><code>tokenName</code> or <code>token_name</code>, <code>scopes[]</code>, <code>readRoots[]</code> / <code>read_roots[]</code>, <code>writeRoots[]</code> / <code>write_roots[]</code>, <code>ttlDays</code> / <code>ttl_days</code>, <code>issuer</code>, <code>audience</code></td></tr>
+          <tr><td>Response</td><td><code>{ api_version, tenant_id, token_id, token_name, token }</code></td></tr>
+        </tbody>
+      </table>
+      <pre><code>{
+  "tokenName": "docs-bot",
+  "subject": "ui",
+  "scopes": ["mcp"],
+  "readRoots": ["docs"],
+  "writeRoots": ["docs"]
+}</code></pre>
+    </section>
+
+    <section class="section-card endpoint" id="mcp-token-post">
+      <h2><code>POST /api/mcp/token</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>Issue an MCP token for downstream use.</td></tr>
+          <tr><td>Content-Type</td><td><code>application/json</code></td></tr>
+          <tr><td>Accepted body fields</td><td>Same as <code>POST /api/tokens</code></td></tr>
+          <tr><td>Response</td><td><code>{ api_version, tenant_id, token_id, token_name, token }</code></td></tr>
+        </tbody>
+      </table>
+      <p class="small">Use this when the UI is provisioning a fresh MCP credential and needs the secret once.</p>
+    </section>
+
+    <section class="section-card endpoint" id="token-locks-get">
+      <h2><code>GET /api/mcp/token/{tokenId}/locks</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>Read mutable lock state for one token.</td></tr>
+          <tr><td>Path parameter</td><td><code>tokenId</code></td></tr>
+          <tr><td>Query parameters</td><td><code>path</code> (default <code>.</code>) or <code>file_id</code></td></tr>
+          <tr><td>Response</td><td><code>{ token_id, tenant_id, token_name, subject, scopes, scope_path, count, locked_paths[] }</code></td></tr>
+        </tbody>
+      </table>
+      <p class="small">The route rejects tokens that do not belong to the current tenant.</p>
+    </section>
+
+    <section class="section-card endpoint" id="token-locks-post">
+      <h2><code>POST /api/mcp/token/{tokenId}/locks</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>Add mutable locks to one token.</td></tr>
+          <tr><td>Path parameter</td><td><code>tokenId</code></td></tr>
+          <tr><td>Content-Type</td><td><code>application/json</code></td></tr>
+          <tr><td>Accepted body fields</td><td><code>path</code>, <code>paths[]</code>, <code>file_id</code>, <code>file_ids[]</code></td></tr>
+          <tr><td>Response</td><td><code>{ token_id, tenant_id, action, count, changed, results[], locked_paths[] }</code></td></tr>
+        </tbody>
+      </table>
+      <p class="small">This is the per-token lock mechanism. The token id is the only key needed to find and mutate the lock set.</p>
+    </section>
+
+    <section class="section-card endpoint" id="token-locks-delete">
+      <h2><code>DELETE /api/mcp/token/{tokenId}/locks</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required</td></tr>
+          <tr><td>Purpose</td><td>Remove mutable locks from one token.</td></tr>
+          <tr><td>Path parameter</td><td><code>tokenId</code></td></tr>
+          <tr><td>Content-Type</td><td><code>application/json</code></td></tr>
+          <tr><td>Accepted body fields</td><td><code>path</code>, <code>paths[]</code>, <code>file_id</code>, <code>file_ids[]</code></td></tr>
+          <tr><td>Response</td><td><code>{ token_id, tenant_id, action, count, changed, results[], locked_paths[] }</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section-card endpoint" id="users-get">
+      <h2><code>GET /api/users</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required, admin role required</td></tr>
+          <tr><td>Purpose</td><td>List all local users.</td></tr>
+          <tr><td>Request parameters</td><td>None</td></tr>
+          <tr><td>Response</td><td><code>{ api_version, users[] }</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section-card endpoint" id="users-post">
+      <h2><code>POST /api/users</code></h2>
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Auth</td><td>Session cookie required, admin role required</td></tr>
+          <tr><td>Purpose</td><td>Create a local auth user.</td></tr>
+          <tr><td>Content-Type</td><td><code>application/json</code></td></tr>
+          <tr><td>Required body fields</td><td><code>email</code>, <code>password</code></td></tr>
+          <tr><td>Optional body fields</td><td><code>name</code>, <code>role</code></td></tr>
+          <tr><td>Response</td><td><code>{ api_version, user }</code></td></tr>
+        </tbody>
+      </table>
+      <p class="small">This route is admin-only, even if the caller already has a valid session.</p>
+    </section>
+
+    <section class="section-card">
+      <h2>Common Error Shape</h2>
+      <p>Unless a route is returning a special case like the OpenAPI document, errors use a small JSON payload.</p>
+      <pre><code>{
+  "error": "Human readable message"
+}</code></pre>
+      <table>
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Typical Meaning</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>400</td><td>Missing or invalid request data.</td></tr>
+          <tr><td>401</td><td>Session missing or invalid.</td></tr>
+          <tr><td>403</td><td>Authenticated but not permitted.</td></tr>
+          <tr><td>404</td><td>Unknown file id or token id.</td></tr>
+          <tr><td>500</td><td>Unexpected backend failure.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <p class="foot">
+      Source of truth for machine-readable clients: <code>/api/openapi</code>. Human-friendly UI docs live here.
+    </p>
+  </div>
+</body>
+</html>
