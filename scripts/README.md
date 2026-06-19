@@ -17,8 +17,11 @@ This folder contains the first-pass local-first vault tooling.
 ## Example usage
 
 ```bash
+python scripts/vault_manager.py setup user-123 --name "Arun Vault"
 python scripts/vault_manager.py init-vault user-123 --name "Arun Vault"
 python scripts/vault_manager.py tree user-123
+python scripts/vault_manager.py status user-123
+python scripts/vault_manager.py locks user-123
 python scripts/vault_manager.py mkdir user-123 Projects/Notes
 python scripts/vault_manager.py write user-123 Projects/Notes/todo.md "Hello from the vault"
 python scripts/vault_manager.py lock user-123 Projects/Notes
@@ -31,6 +34,7 @@ python scripts/mcp_qdrant_server.py --root ./vaults
 
 - This is app-level locking, not OS ACL hardening yet.
 - If you want, we can add OS permission enforcement next for Windows or Linux.
+- Use `setup` for a one-command vault bootstrap that also prints the initial status.
 - Set `QDRANT_URL` and `JASPER_EMBEDDER_URL` before starting the MCP server.
 - Set `MCP_JWT_SECRET` and, if you want a custom path, `MCP_JWT_REVOCATION_PATH`.
 - Usage events are appended to `MCP_USAGE_LOG_PATH` so you can track token usage by `jti` and `token_name`.

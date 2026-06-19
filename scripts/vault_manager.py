@@ -18,6 +18,7 @@ from typing import Iterable
 
 from vault_catalog import (
     ensure_file_id,
+    load_catalog,
     remove_path,
     rename_path,
     get_file_id_for_path,
@@ -331,6 +332,26 @@ def render_tree(ctx: VaultContext) -> str:
     return "\n".join(lines)
 
 
+def render_status(ctx: VaultContext) -> str:
+    catalog = load_catalog(ctx.vault_root)
+    locks = sorted(load_lock_manifest(ctx.vault_root))
+    payload = {
+        "vault_root": str(ctx.vault_root),
+        "usage_bytes": get_vault_usage_bytes(ctx.vault_root),
+        "file_count": len(catalog.get("files", {})),
+        "path_count": len(catalog.get("paths", {})),
+        "locked_paths": locks,
+    }
+    return json.dumps(payload, indent=2)
+
+
+def render_locks(ctx: VaultContext) -> str:
+    locks = sorted(load_lock_manifest(ctx.vault_root))
+    if not locks:
+        return "(none)"
+    return "\n".join(locks)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Manage a local-first vault tree")
     parser.add_argument(
@@ -346,8 +367,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("user_id")
     p_init.add_argument("--name", default="Vault")
 
+    p_setup = sub.add_parser("setup", help="Create or initialize a vault root for a user")
+    p_setup.add_argument("user_id")
+    p_setup.add_argument("--name", default="Vault")
+
     p_tree = sub.add_parser("tree", help="Print a vault tree")
     p_tree.add_argument("user_id")
+
+    p_status = sub.add_parser("status", help="Print vault setup status")
+    p_status.add_argument("user_id")
+
+    p_locks = sub.add_parser("locks", help="List locked paths in the vault")
+    p_locks.add_argument("user_id")
 
     p_mkdir = sub.add_parser("mkdir", help="Create a folder in the vault")
     p_mkdir.add_argument("user_id")
@@ -393,10 +424,24 @@ def main() -> int:
             print(path)
             return 0
 
+        if args.command == "setup":
+            path = create_vault(root, args.user_id, args.name)
+            print(path)
+            print(render_status(get_vault_context(root, args.user_id)))
+            return 0
+
         ctx = get_vault_context(root, args.user_id)
 
         if args.command == "tree":
             print(render_tree(ctx))
+            return 0
+
+        if args.command == "status":
+            print(render_status(ctx))
+            return 0
+
+        if args.command == "locks":
+            print(render_locks(ctx))
             return 0
 
         if args.command == "mkdir":
