@@ -680,7 +680,9 @@ async function ensureCollection(): Promise<void> {
 }
 
 function stablePointId(tenantId: string, fileId: string, chunkHash: string, occurrence: number): string {
-	return createHmac("sha256", "qdrant-point").update(`${tenantId}:${fileId}:${chunkHash}:${occurrence}`).digest("hex");
+	const hex = createHmac("sha256", "qdrant-point").update(`${tenantId}:${fileId}:${chunkHash}:${occurrence}`).digest("hex");
+	// Qdrant requires UUID or uint — format the first 32 hex chars as a UUID
+	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
 export async function qdrantUpdateFile(options: { tenantId: string; fileId: string; content: string; embeddingModel: string; legacyFilePath?: string }): Promise<{ created_or_updated_chunks: number; deleted_chunks: number; existing_chunks: number }> {

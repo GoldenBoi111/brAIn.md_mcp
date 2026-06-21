@@ -1,8 +1,13 @@
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+const projectRoot = dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  outputFileTracingRoot: "C:/Repos/brAIn.md MCP Server",
+  outputFileTracingRoot: projectRoot,
   turbopack: {
-    root: "C:/Repos/brAIn.md MCP Server",
+    root: projectRoot,
   },
 };
 
