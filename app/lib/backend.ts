@@ -5,23 +5,41 @@ import { BackendError } from "./errors";
 
 export { BackendError };
 
-export type TokenClaims = { tenantId: string; tokenName: string; subject: string; scopes: string[]; readRoots: string[]; writeRoots: string[]; jwtId: string; issuedAt: number; expiresAt: number; issuer: string; audience: string };
+export type TokenClaims = { tenantId: string; tokenName: string; subject: string; email: string; scopes: string[]; readRoots: string[]; writeRoots: string[]; jwtId: string; issuedAt: number; expiresAt: number; issuer: string; audience: string };
 
-export type FileNode = { name: string; relativePath: string; kind: "file" | "folder"; locked: boolean; fileId?: string | null; sizeBytes?: number | null; createdAt?: number | null; modifiedAt?: number | null; children?: FileNode[] };
+export type FileNode = { name: string; relativePath: string; kind: "file" | "folder"; locked: boolean; fileId?: string | null; folderId?: string | null; file_id?: string | null; folder_id?: string | null; sizeBytes?: number | null; createdAt?: number | null; modifiedAt?: number | null; children?: FileNode[] };
 
-type Catalog = { files: Record<string, { path: string; created_at: number; updated_at: number }>; paths: Record<string, string>; updated_at: number };
+type CatalogItem = { path: string; created_at: number; updated_at: number };
+type Catalog = {
+	files: Record<string, CatalogItem>;
+	paths: Record<string, string>;
+	folders: Record<string, CatalogItem>;
+	folder_paths: Record<string, string>;
+	updated_at: number;
+};
 
 type TokenLockRecord = {
 	tenant_id: string;
 	token_name: string;
 	subject: string;
+	source: string;
+	provider_name: string;
+	created_by: string;
+	oauth_client_id: string;
+	oauth_client_name: string;
 	scopes: string[];
 	read_roots: string[];
 	write_roots: string[];
 	locked_paths: string[];
+	description: string;
+	avatar_url: string;
+	avatar_alt: string;
+	avatar_background: string;
 	created_at: number;
 	updated_at: number;
 	expires_at: number;
+	last_used_at: number | null;
+	revoked_at: number | null;
 };
 
 type TokenLockCatalog = { tokens: Record<string, TokenLockRecord>; updated_at: number };
@@ -30,6 +48,15 @@ type TokenLockRegistration = {
 	tenantId: string;
 	tokenName: string;
 	subject: string;
+	source?: string;
+	providerName?: string;
+	createdBy?: string;
+	oauthClientId?: string;
+	oauthClientName?: string;
+	description?: string;
+	avatarUrl?: string;
+	avatarAlt?: string;
+	avatarBackground?: string;
 	scopes: string[];
 	readRoots: string[];
 	writeRoots: string[];
@@ -37,6 +64,8 @@ type TokenLockRegistration = {
 	issuedAt: number;
 	expiresAt: number;
 };
+
+type TokenLockUpdate = Partial<Pick<TokenLockRecord, "tenant_id" | "token_name" | "subject" | "source" | "provider_name" | "created_by" | "oauth_client_id" | "oauth_client_name" | "description" | "avatar_url" | "avatar_alt" | "avatar_background" | "scopes" | "read_roots" | "write_roots" | "locked_paths" | "expires_at" | "last_used_at" | "revoked_at">>;
 
 type QdrantPoint = { id: string; vector: number[]; payload: Record<string, unknown> };
 
@@ -143,14 +172,22 @@ async function loadCatalog(vaultRoot: string): Promise<Catalog> {
 	const data = (await readJson<Record<string, unknown>>(path.join(vaultRoot, CATALOG_FILE_NAME))) as Record<string, unknown>;
 	const files = data.files;
 	const paths = data.paths;
+	const folders = data.folders;
+	const folderPaths = data.folder_paths;
 	if (!files || typeof files !== "object" || !paths || typeof paths !== "object") {
-		return { files: {}, paths: {}, updated_at: nowSeconds() };
+		return { files: {}, paths: {}, folders: {}, folder_paths: {}, updated_at: nowSeconds() };
 	}
-	return { files: files as Catalog["files"], paths: paths as Catalog["paths"], updated_at: Number(data.updated_at ?? nowSeconds()) };
+	return {
+		files: files as Catalog["files"],
+		paths: paths as Catalog["paths"],
+		folders: folders && typeof folders === "object" ? (folders as Catalog["folders"]) : {},
+		folder_paths: folderPaths && typeof folderPaths === "object" ? (folderPaths as Catalog["folder_paths"]) : {},
+		updated_at: Number(data.updated_at ?? nowSeconds()),
+	};
 }
 
 async function saveCatalog(vaultRoot: string, catalog: Catalog): Promise<void> {
-	await atomicWrite(path.join(vaultRoot, CATALOG_FILE_NAME), JSON.stringify({ files: catalog.files, paths: catalog.paths, updated_at: nowSeconds() }, null, 2) + "\n");
+	await atomicWrite(path.join(vaultRoot, CATALOG_FILE_NAME), JSON.stringify({ files: catalog.files, paths: catalog.paths, folders: catalog.folders, folder_paths: catalog.folder_paths, updated_at: nowSeconds() }, null, 2) + "\n");
 }
 
 export async function createFileRecord(vaultRoot: string, relativePath: string): Promise<string> {
@@ -177,15 +214,70 @@ export async function ensureFileId(vaultRoot: string, relativePath: string): Pro
 	return createFileRecord(vaultRoot, rel);
 }
 
+async function ensureFolderHierarchy(vaultRoot: string, relativePath: string): Promise<void> {
+	const rel = normalizeRelPath(relativePath);
+	if (rel === ".") {
+		return;
+	}
+	const segments = rel.split("/");
+	let current = "";
+	for (const segment of segments) {
+		current = current ? `${current}/${segment}` : segment;
+		await ensureFolderId(vaultRoot, current);
+	}
+}
+
+export async function createFolderRecord(vaultRoot: string, relativePath: string): Promise<string> {
+	const rel = normalizeRelPath(relativePath);
+	const catalog = await loadCatalog(vaultRoot);
+	if (catalog.folder_paths[rel]) {
+		const existingId = catalog.folder_paths[rel];
+		if (catalog.folders[existingId]) {
+			return existingId;
+		}
+	}
+	const folderId = randomUUID();
+	const ts = nowSeconds();
+	catalog.folders[folderId] = { path: rel, created_at: ts, updated_at: ts };
+	catalog.folder_paths[rel] = folderId;
+	await saveCatalog(vaultRoot, catalog);
+	return folderId;
+}
+
+export async function ensureFolderId(vaultRoot: string, relativePath: string): Promise<string> {
+	const rel = normalizeRelPath(relativePath);
+	if (rel === ".") {
+		throw new BackendError("The vault root does not have a folder_id", 400);
+	}
+	const catalog = await loadCatalog(vaultRoot);
+	const existing = catalog.folder_paths[rel];
+	if (existing && catalog.folders[existing]) {
+		return existing;
+	}
+	return createFolderRecord(vaultRoot, rel);
+}
+
 export async function getFileIdForPath(vaultRoot: string, relativePath: string): Promise<string | null> {
 	const rel = normalizeRelPath(relativePath);
 	const catalog = await loadCatalog(vaultRoot);
 	return catalog.paths[rel] ?? null;
 }
 
+export async function getFolderIdForPath(vaultRoot: string, relativePath: string): Promise<string | null> {
+	const rel = normalizeRelPath(relativePath);
+	const catalog = await loadCatalog(vaultRoot);
+	return catalog.folder_paths[rel] ?? null;
+}
+
 export async function getPathForFileId(vaultRoot: string, fileId: string): Promise<string | null> {
 	const catalog = await loadCatalog(vaultRoot);
 	const record = catalog.files[fileId];
+	return record?.path ?? null;
+}
+
+export async function getPathForFolderId(vaultRoot: string, folderId: string): Promise<string | null> {
+	const catalog = await loadCatalog(vaultRoot);
+	const record = catalog.folders[folderId];
 	return record?.path ?? null;
 }
 
@@ -220,6 +312,14 @@ export async function removePath(vaultRoot: string, relativePath: string): Promi
 			}
 		}
 	}
+	for (const [folderId, record] of Object.entries(catalog.folders)) {
+		if (record.path === rel || record.path.startsWith(rel + "/")) {
+			delete catalog.folders[folderId];
+			if (catalog.folder_paths[record.path] === folderId) {
+				delete catalog.folder_paths[record.path];
+			}
+		}
+	}
 	await saveCatalog(vaultRoot, catalog);
 }
 
@@ -239,6 +339,18 @@ export async function renamePath(vaultRoot: string, oldRelativePath: string, new
 			catalog.paths[updated] = fileId;
 		}
 	}
+	for (const [folderId, record] of Object.entries(catalog.folders)) {
+		if (record.path === oldRel || record.path.startsWith(oldRel + "/")) {
+			const suffix = record.path.slice(oldRel.length).replace(/^\//, "");
+			const updated = suffix ? `${newRel}/${suffix}` : newRel;
+			if (catalog.folder_paths[record.path] === folderId) {
+				delete catalog.folder_paths[record.path];
+			}
+			record.path = updated;
+			record.updated_at = nowSeconds();
+			catalog.folder_paths[updated] = folderId;
+		}
+	}
 	await saveCatalog(vaultRoot, catalog);
 }
 
@@ -250,10 +362,18 @@ export async function listFileIdsUnderPath(vaultRoot: string, relativePath: stri
 		.map(([fileId]) => fileId);
 }
 
+export async function listFolderIdsUnderPath(vaultRoot: string, relativePath: string): Promise<string[]> {
+	const rel = normalizeRelPath(relativePath);
+	const catalog = await loadCatalog(vaultRoot);
+	return Object.entries(catalog.folders)
+		.filter(([, record]) => record.path === rel || record.path.startsWith(rel + "/"))
+		.map(([folderId]) => folderId);
+}
+
 export async function listPathsUnderPath(vaultRoot: string, relativePath: string): Promise<string[]> {
 	const rel = normalizeRelPath(relativePath);
 	const catalog = await loadCatalog(vaultRoot);
-	return Object.values(catalog.files)
+	return [...Object.values(catalog.files), ...Object.values(catalog.folders)]
 		.filter((record) => record.path === rel || record.path.startsWith(rel + "/"))
 		.map((record) => record.path);
 }
@@ -284,13 +404,24 @@ function normalizeTokenLockRecord(tokenId: string, value: Partial<TokenLockRecor
 		tenant_id: String(value.tenant_id ?? ""),
 		token_name: String(value.token_name ?? ""),
 		subject: String(value.subject ?? ""),
+		source: String(value.source ?? "manual"),
+		provider_name: String(value.provider_name ?? ""),
+		created_by: String(value.created_by ?? ""),
+		oauth_client_id: String(value.oauth_client_id ?? ""),
+		oauth_client_name: String(value.oauth_client_name ?? ""),
 		scopes: Array.isArray(value.scopes) ? value.scopes.map(String) : [],
 		read_roots: Array.isArray(value.read_roots) ? value.read_roots.map(String) : [],
 		write_roots: Array.isArray(value.write_roots) ? value.write_roots.map(String) : [],
 		locked_paths: normalizeLockedPathList(value.locked_paths),
+		description: String(value.description ?? ""),
+		avatar_url: String(value.avatar_url ?? ""),
+		avatar_alt: String(value.avatar_alt ?? ""),
+		avatar_background: String(value.avatar_background ?? ""),
 		created_at: Number(value.created_at ?? nowSeconds()),
 		updated_at: Number(value.updated_at ?? nowSeconds()),
 		expires_at: Number(value.expires_at ?? 0),
+		last_used_at: value.last_used_at === null || value.last_used_at === undefined ? null : Number(value.last_used_at),
+		revoked_at: value.revoked_at === null || value.revoked_at === undefined ? null : Number(value.revoked_at),
 	};
 }
 
@@ -336,13 +467,24 @@ export async function registerTokenLockRecord(options: TokenLockRegistration): P
 		tenant_id: options.tenantId,
 		token_name: options.tokenName,
 		subject: options.subject,
+		source: options.source ?? "manual",
+		provider_name: options.providerName ?? "",
+		created_by: options.createdBy ?? "",
+		oauth_client_id: options.oauthClientId ?? "",
+		oauth_client_name: options.oauthClientName ?? "",
 		scopes: options.scopes,
 		read_roots: options.readRoots,
 		write_roots: options.writeRoots,
 		locked_paths: existing?.locked_paths ?? [],
+		description: options.description ?? existing?.description ?? "",
+		avatar_url: options.avatarUrl ?? existing?.avatar_url ?? "",
+		avatar_alt: options.avatarAlt ?? existing?.avatar_alt ?? "",
+		avatar_background: options.avatarBackground ?? existing?.avatar_background ?? "",
 		created_at: existing?.created_at ?? options.issuedAt,
 		updated_at: nowSeconds(),
 		expires_at: options.expiresAt,
+		last_used_at: existing?.last_used_at ?? null,
+		revoked_at: existing?.revoked_at ?? null,
 	});
 	catalog.tokens[options.jwtId] = record;
 	await saveTokenLockCatalog(catalog);
@@ -359,6 +501,90 @@ export async function listTokenLockRecords(): Promise<Array<{ token_id: string }
 	return Object.entries(catalog.tokens)
 		.map(([tokenId, record]) => ({ token_id: tokenId, ...normalizeTokenLockRecord(tokenId, record) }))
 		.sort((a, b) => b.updated_at - a.updated_at);
+}
+
+export async function updateTokenLockRecord(tokenId: string, patch: TokenLockUpdate): Promise<TokenLockRecord> {
+	const catalog = await loadTokenLockCatalog();
+	const existing = catalog.tokens[tokenId];
+	if (!existing) {
+		throw new BackendError(`Unknown token lock record: ${tokenId}`, 404);
+	}
+	const record = normalizeTokenLockRecord(tokenId, {
+		...existing,
+		...(patch.tenant_id !== undefined ? { tenant_id: patch.tenant_id } : {}),
+		...(patch.token_name !== undefined ? { token_name: patch.token_name } : {}),
+		...(patch.subject !== undefined ? { subject: patch.subject } : {}),
+		...(patch.source !== undefined ? { source: patch.source } : {}),
+		...(patch.provider_name !== undefined ? { provider_name: patch.provider_name } : {}),
+		...(patch.created_by !== undefined ? { created_by: patch.created_by } : {}),
+		...(patch.oauth_client_id !== undefined ? { oauth_client_id: patch.oauth_client_id } : {}),
+		...(patch.oauth_client_name !== undefined ? { oauth_client_name: patch.oauth_client_name } : {}),
+		...(patch.description !== undefined ? { description: patch.description } : {}),
+		...(patch.avatar_url !== undefined ? { avatar_url: patch.avatar_url } : {}),
+		...(patch.avatar_alt !== undefined ? { avatar_alt: patch.avatar_alt } : {}),
+		...(patch.avatar_background !== undefined ? { avatar_background: patch.avatar_background } : {}),
+		...(patch.scopes !== undefined ? { scopes: patch.scopes } : {}),
+		...(patch.read_roots !== undefined ? { read_roots: patch.read_roots } : {}),
+		...(patch.write_roots !== undefined ? { write_roots: patch.write_roots } : {}),
+		...(patch.locked_paths !== undefined ? { locked_paths: patch.locked_paths } : {}),
+		...(patch.expires_at !== undefined ? { expires_at: patch.expires_at } : {}),
+		...(patch.last_used_at !== undefined ? { last_used_at: patch.last_used_at } : {}),
+		...(patch.revoked_at !== undefined ? { revoked_at: patch.revoked_at } : {}),
+		updated_at: nowSeconds(),
+	});
+	catalog.tokens[tokenId] = record;
+	await saveTokenLockCatalog(catalog);
+	return record;
+}
+
+async function loadRevocationCatalog(): Promise<{ revoked: Record<string, { revoked_at: number; reason?: string }>; updated_at: number }> {
+	const data = (await readJson<Record<string, unknown>>(revocationPath())) as Record<string, unknown>;
+	const revoked = data.revoked;
+	if (!revoked || typeof revoked !== "object") {
+		return { revoked: {}, updated_at: nowSeconds() };
+	}
+	const catalog: { revoked: Record<string, { revoked_at: number; reason?: string }>; updated_at: number } = { revoked: {}, updated_at: Number(data.updated_at ?? nowSeconds()) };
+	for (const [tokenId, value] of Object.entries(revoked as Record<string, unknown>)) {
+		if (value && typeof value === "object") {
+			catalog.revoked[tokenId] = {
+				revoked_at: Number((value as Record<string, unknown>).revoked_at ?? nowSeconds()),
+				...(String((value as Record<string, unknown>).reason ?? "").trim() ? { reason: String((value as Record<string, unknown>).reason) } : {}),
+			};
+		}
+	}
+	return catalog;
+}
+
+async function saveRevocationCatalog(catalog: { revoked: Record<string, { revoked_at: number; reason?: string }>; updated_at: number }): Promise<void> {
+	await atomicWrite(revocationPath(), JSON.stringify({ revoked: catalog.revoked, updated_at: nowSeconds() }, null, 2) + "\n");
+}
+
+export async function revokeTokenLockRecord(tokenId: string, reason = "revoked"): Promise<TokenLockRecord> {
+	const catalog = await loadTokenLockCatalog();
+	const existing = catalog.tokens[tokenId];
+	if (!existing) {
+		throw new BackendError(`Unknown token lock record: ${tokenId}`, 404);
+	}
+	const now = nowSeconds();
+	const record = normalizeTokenLockRecord(tokenId, { ...existing, revoked_at: now, updated_at: now });
+	catalog.tokens[tokenId] = record;
+	await saveTokenLockCatalog(catalog);
+	const revocations = await loadRevocationCatalog();
+	revocations.revoked[tokenId] = { revoked_at: now, ...(reason ? { reason } : {}) };
+	await saveRevocationCatalog(revocations);
+	return record;
+}
+
+export async function deleteTokenLockRecord(tokenId: string): Promise<void> {
+	const catalog = await loadTokenLockCatalog();
+	if (!catalog.tokens[tokenId]) {
+		throw new BackendError(`Unknown token lock record: ${tokenId}`, 404);
+	}
+	delete catalog.tokens[tokenId];
+	await saveTokenLockCatalog(catalog);
+	const revocations = await loadRevocationCatalog();
+	revocations.revoked[tokenId] = { revoked_at: nowSeconds(), reason: "deleted" };
+	await saveRevocationCatalog(revocations);
 }
 
 export async function lockTokenPath(tokenId: string, relativePath: string): Promise<boolean> {
@@ -471,7 +697,16 @@ export async function createFolder(vaultRoot: string, locks: Set<string>, relati
 	assertUnlocked(rel, locks);
 	const target = resolveWithinRoot(vaultRoot, path.join(vaultRoot, rel));
 	await ensureParentExists(target);
-	await fs.mkdir(target, { recursive: false });
+	try {
+		await fs.mkdir(target, { recursive: false });
+	} catch (error: any) {
+		if (error?.code === "EEXIST") {
+			throw new BackendError(`Folder already exists: ${rel}`, 409);
+		}
+		throw error;
+	}
+	await ensureFolderHierarchy(vaultRoot, rel);
+	await ensureFolderId(vaultRoot, rel);
 	return target;
 }
 
@@ -488,6 +723,7 @@ export async function writeFile(vaultRoot: string, locks: Set<string>, relativeP
 		throw new BackendError(`Vault size limit exceeded: ${proposedUsage} bytes would exceed ${MAX_VAULT_BYTES} bytes`, 413);
 	}
 	await fs.writeFile(target, content, "utf8");
+	await ensureFolderHierarchy(vaultRoot, path.dirname(rel) === "." ? "." : path.dirname(rel));
 	await ensureFileId(vaultRoot, rel);
 	return target;
 }
@@ -538,7 +774,18 @@ export async function getItemMetadata(vaultRoot: string, relativePath: string): 
 		throw new BackendError(`Path does not exist: ${relativePath}`, 404);
 	}
 	const isDir = stat.isDirectory();
-	return { relative_path: rel, file_location: target, kind: isDir ? "folder" : "file", exists: true, locked: isLocked(rel, await loadLockManifest(vaultRoot)), size_bytes: isDir ? null : stat.size, created_at: Math.floor(stat.birthtimeMs / 1000), modified_at: Math.floor(stat.mtimeMs / 1000), file_id: isDir ? null : await getFileIdForPath(vaultRoot, rel) };
+	return {
+		relative_path: rel,
+		file_location: target,
+		kind: isDir ? "folder" : "file",
+		exists: true,
+		locked: isLocked(rel, await loadLockManifest(vaultRoot)),
+		size_bytes: isDir ? null : stat.size,
+		created_at: Math.floor(stat.birthtimeMs / 1000),
+		modified_at: Math.floor(stat.mtimeMs / 1000),
+		file_id: isDir ? null : await getFileIdForPath(vaultRoot, rel),
+		folder_id: isDir && rel !== "." ? await ensureFolderId(vaultRoot, rel) : null,
+	};
 }
 
 export async function listFolderContents(vaultRoot: string, relativePath = "."): Promise<FileNode[]> {
@@ -558,7 +805,20 @@ export async function listFolderContents(vaultRoot: string, relativePath = "."):
 	for (const item of filtered.sort((a, b) => Number(b.isFile()) - Number(a.isFile()) || a.name.localeCompare(b.name))) {
 		const itemPath = rel === "." ? item.name : `${rel}/${item.name}`;
 		const itemStat = await fs.stat(path.join(target, item.name));
-		nodes.push({ name: item.name, relativePath: itemPath, kind: item.isDirectory() ? "folder" : "file", locked: isLocked(itemPath, locks), fileId: item.isFile() ? await getFileIdForPath(vaultRoot, itemPath) : null, sizeBytes: item.isFile() ? itemStat.size : null, modifiedAt: Math.floor(itemStat.mtimeMs / 1000) });
+		const fileId = item.isFile() ? await getFileIdForPath(vaultRoot, itemPath) : null;
+		const folderId = item.isDirectory() ? await ensureFolderId(vaultRoot, itemPath) : null;
+		nodes.push({
+			name: item.name,
+			relativePath: itemPath,
+			kind: item.isDirectory() ? "folder" : "file",
+			locked: isLocked(itemPath, locks),
+			fileId,
+			file_id: fileId,
+			folderId,
+			folder_id: folderId,
+			sizeBytes: item.isFile() ? itemStat.size : null,
+			modifiedAt: Math.floor(itemStat.mtimeMs / 1000),
+		});
 	}
 	return nodes;
 }
@@ -572,7 +832,21 @@ export async function buildTreeSnapshot(vaultRoot: string, relativePath = "."): 
 	}
 	const locks = await loadLockManifest(vaultRoot);
 	const isDir = stat.isDirectory();
-	const node: FileNode = { name: rel === "." ? path.basename(vaultRoot) : path.basename(target), relativePath: rel, kind: isDir ? "folder" : "file", locked: isLocked(rel, locks), fileId: isDir ? null : await getFileIdForPath(vaultRoot, rel), sizeBytes: isDir ? null : stat.size, createdAt: Math.floor(stat.birthtimeMs / 1000), modifiedAt: Math.floor(stat.mtimeMs / 1000) };
+	const fileId = isDir ? null : await getFileIdForPath(vaultRoot, rel);
+	const folderId = isDir && rel !== "." ? await ensureFolderId(vaultRoot, rel) : null;
+	const node: FileNode = {
+		name: rel === "." ? path.basename(vaultRoot) : path.basename(target),
+		relativePath: rel,
+		kind: isDir ? "folder" : "file",
+		locked: isLocked(rel, locks),
+		fileId,
+		file_id: fileId,
+		folderId,
+		folder_id: folderId,
+		sizeBytes: isDir ? null : stat.size,
+		createdAt: Math.floor(stat.birthtimeMs / 1000),
+		modifiedAt: Math.floor(stat.mtimeMs / 1000),
+	};
 	if (isDir) {
 		const children = await listFolderContents(vaultRoot, rel);
 		node.children = [];
@@ -617,9 +891,16 @@ export async function movePath(vaultRoot: string, locks: Set<string>, source: st
 	assertUnlocked(destRel, locks);
 	const src = resolveWithinRoot(vaultRoot, path.join(vaultRoot, sourceRel));
 	const dst = resolveWithinRoot(vaultRoot, path.join(vaultRoot, destRel));
+	const sourceStat = await fs.stat(src).catch(() => null);
 	await ensureParentExists(dst);
 	await fs.rename(src, dst);
 	await renamePath(vaultRoot, sourceRel, destRel);
+	if (sourceStat?.isDirectory()) {
+		await ensureFolderHierarchy(vaultRoot, destRel);
+		await ensureFolderId(vaultRoot, destRel);
+	} else {
+		await ensureFolderHierarchy(vaultRoot, path.dirname(destRel) === "." ? "." : path.dirname(destRel));
+	}
 	return { source: src, destination: dst };
 }
 
@@ -888,7 +1169,7 @@ export async function togglePathLock(vaultRoot: string, relativePath: string): P
 	return !isLocked;
 }
 
-export async function issueToken(options: { tenantId: string; tokenName: string; subject: string; scopes: string[]; readRoots?: string[] | null; writeRoots?: string[] | null; ttlDays?: number; audience?: string | null; issuer?: string | null }): Promise<string> {
+export async function issueToken(options: { tenantId: string; tokenName: string; subject: string; email?: string | null; scopes: string[]; readRoots?: string[] | null; writeRoots?: string[] | null; ttlDays?: number; audience?: string | null; issuer?: string | null; source?: string; providerName?: string; createdBy?: string; oauthClientId?: string; oauthClientName?: string; description?: string; avatarUrl?: string; avatarAlt?: string; avatarBackground?: string }): Promise<string> {
 	const now = nowSeconds();
 	let readRoots = options.readRoots ?? null;
 	let writeRoots = options.writeRoots ?? null;
@@ -896,6 +1177,7 @@ export async function issueToken(options: { tenantId: string; tokenName: string;
 	if (!writeRoots && readRoots) writeRoots = [...readRoots];
 	const jwtId = randomUUID();
 	const payload: Record<string, unknown> = { iss: options.issuer ?? defaultIssuer(), aud: options.audience ?? defaultAudience(), sub: options.subject, tenant_id: options.tenantId, token_name: options.tokenName, scopes: options.scopes, jti: jwtId, iat: now, nbf: now, exp: now + (options.ttlDays ?? 365) * 24 * 60 * 60, v: 1 };
+	if (options.email) payload.email = options.email;
 	if (readRoots?.length) payload.read_roots = readRoots;
 	if (writeRoots?.length) payload.write_roots = writeRoots;
 	const header = { alg: "HS256", typ: "JWT" };
@@ -906,6 +1188,15 @@ export async function issueToken(options: { tenantId: string; tokenName: string;
 		tenantId: options.tenantId,
 		tokenName: options.tokenName,
 		subject: options.subject,
+		source: options.source ?? "manual",
+		providerName: options.providerName ?? "",
+		createdBy: options.createdBy ?? "",
+		oauthClientId: options.oauthClientId ?? "",
+		oauthClientName: options.oauthClientName ?? "",
+		description: options.description ?? "",
+		avatarUrl: options.avatarUrl ?? "",
+		avatarAlt: options.avatarAlt ?? "",
+		avatarBackground: options.avatarBackground ?? "",
 		scopes: options.scopes,
 		readRoots: readRoots ?? [],
 		writeRoots: writeRoots ?? [],
@@ -932,7 +1223,7 @@ export async function verifyToken(token: string): Promise<TokenClaims> {
 	if (!Buffer.from(expected).equals(Buffer.from(actual))) {
 		throw new BackendError("Invalid JWT signature", 401);
 	}
-	const claims: TokenClaims = { tenantId: String(payload.tenant_id ?? ""), tokenName: String(payload.token_name ?? ""), subject: String(payload.sub ?? ""), scopes: Array.isArray(payload.scopes) ? payload.scopes.map(String) : [], readRoots: Array.isArray(payload.read_roots) ? payload.read_roots.map(String) : Array.isArray(payload.allowed_paths) ? payload.allowed_paths.map(String) : [], writeRoots: Array.isArray(payload.write_roots) ? payload.write_roots.map(String) : Array.isArray(payload.allowed_paths) ? payload.allowed_paths.map(String) : [], jwtId: String(payload.jti ?? ""), issuedAt: Number(payload.iat ?? 0), expiresAt: Number(payload.exp ?? 0), issuer: String(payload.iss ?? ""), audience: String(payload.aud ?? "") };
+	const claims: TokenClaims = { tenantId: String(payload.tenant_id ?? ""), tokenName: String(payload.token_name ?? ""), subject: String(payload.sub ?? ""), email: String(payload.email ?? ""), scopes: Array.isArray(payload.scopes) ? payload.scopes.map(String) : [], readRoots: Array.isArray(payload.read_roots) ? payload.read_roots.map(String) : Array.isArray(payload.allowed_paths) ? payload.allowed_paths.map(String) : [], writeRoots: Array.isArray(payload.write_roots) ? payload.write_roots.map(String) : Array.isArray(payload.allowed_paths) ? payload.allowed_paths.map(String) : [], jwtId: String(payload.jti ?? ""), issuedAt: Number(payload.iat ?? 0), expiresAt: Number(payload.exp ?? 0), issuer: String(payload.iss ?? ""), audience: String(payload.aud ?? "") };
 	const now = nowSeconds();
 	if (claims.issuedAt > now + 60) throw new BackendError("JWT issued in the future", 401);
 	if (claims.expiresAt <= now) throw new BackendError("JWT expired", 401);
@@ -945,6 +1236,14 @@ export async function verifyToken(token: string): Promise<TokenClaims> {
 	if (revokedEntry && Number(revokedEntry.revoked_at ?? 0) > 0) {
 		throw new BackendError("JWT has been revoked", 401);
 	}
+	const catalog = await loadTokenLockCatalog();
+	const tokenRecord = catalog.tokens[claims.jwtId];
+	if (tokenRecord) {
+		tokenRecord.last_used_at = now;
+		tokenRecord.updated_at = now;
+		catalog.tokens[claims.jwtId] = tokenRecord;
+		await saveTokenLockCatalog(catalog);
+	}
 	return claims;
 }
 
@@ -956,15 +1255,155 @@ export function requireScope(claims: TokenClaims, scope: string): void {
 
 export function buildTools() {
 	return [
-		{ name: "create_item", description: "Create a file or folder inside an authorized tenant vault and index stable file IDs in Qdrant." },
-		{ name: "read_item", description: "Embed a natural-language request and return the best matching file ID, location, and content." },
-		{ name: "search_item", description: "Embed a natural-language request and return matching file IDs and locations without reading file contents." },
-		{ name: "update_item", description: "Update an existing file in the vault and refresh the changed Qdrant chunks by file ID." },
-		{ name: "append_item", description: "Append text to a file in the vault and refresh its indexed chunks by file ID." },
-		{ name: "move_item", description: "Move a file or folder inside the vault and update the stable catalog path mapping." },
-		{ name: "delete_item", description: "Delete a file or folder from the vault and remove its indexed chunks by file ID." },
-		{ name: "get_item_metadata", description: "Return metadata for a file or folder in the vault without reading its content." },
-		{ name: "list_folder_contents", description: "List the immediate children of a folder in the vault." },
-		{ name: "exists_item", description: "Check whether a file or folder exists in the vault." },
+		{
+			name: "create_item",
+			description: "Create a file or folder inside an authorized tenant vault and index stable file IDs in Qdrant.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					kind: { type: "string", enum: ["file", "folder"], description: "Whether to create a file or folder." },
+					path: { type: "string", description: "Relative path inside the tenant vault." },
+					content: { type: "string", description: "File content to write when kind is file." },
+					embedding_model: { type: "string", description: "Embedding model name to record for indexed chunks." },
+				},
+				required: ["path"],
+				additionalProperties: true,
+			},
+		},
+		{
+			name: "read_item",
+			description: "Embed a natural-language request and return the best matching file ID, location, and content.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					query: { type: "string", description: "Natural-language query to search by semantic similarity." },
+					path: { type: "string", description: "Relative path to read directly." },
+					relative_path: { type: "string", description: "Alias for path." },
+					file_id: { type: "string", description: "Stable file ID to resolve and read." },
+					fileId: { type: "string", description: "Alias for file_id." },
+					top_k: { type: "number", description: "Maximum semantic matches to consider." },
+				},
+				additionalProperties: true,
+			},
+		},
+		{
+			name: "search_item",
+			description: "Embed a natural-language request and return matching file IDs and locations without reading file contents.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					query: { type: "string", description: "Natural-language query to search by semantic similarity." },
+					top_k: { type: "number", description: "Maximum number of matches to return." },
+				},
+				required: ["query"],
+				additionalProperties: true,
+			},
+		},
+		{
+			name: "update_item",
+			description: "Update an existing file in the vault and refresh the changed Qdrant chunks by file ID.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					path: { type: "string", description: "Relative path to update." },
+					relative_path: { type: "string", description: "Alias for path." },
+					file_id: { type: "string", description: "Stable file ID to resolve before update." },
+					fileId: { type: "string", description: "Alias for file_id." },
+					content: { type: "string", description: "Replacement file content." },
+					embedding_model: { type: "string", description: "Embedding model name to record for indexed chunks." },
+				},
+				required: ["content"],
+				additionalProperties: true,
+			},
+		},
+		{
+			name: "append_item",
+			description: "Append text to a file in the vault and refresh its indexed chunks by file ID.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					path: { type: "string", description: "Relative path to append to." },
+					relative_path: { type: "string", description: "Alias for path." },
+					file_id: { type: "string", description: "Stable file ID to resolve before append." },
+					fileId: { type: "string", description: "Alias for file_id." },
+					content: { type: "string", description: "Text to append." },
+					embedding_model: { type: "string", description: "Embedding model name to record for indexed chunks." },
+				},
+				required: ["content"],
+				additionalProperties: true,
+			},
+		},
+		{
+			name: "move_item",
+			description: "Move a file or folder inside the vault and update the stable catalog path mapping.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					source_path: { type: "string", description: "Source relative path." },
+					source: { type: "string", description: "Alias for source_path." },
+					path: { type: "string", description: "Alias for source_path when resolving by path." },
+					destination_path: { type: "string", description: "Destination relative path." },
+					destination: { type: "string", description: "Alias for destination_path." },
+				},
+				required: ["destination_path"],
+				additionalProperties: true,
+			},
+		},
+		{
+			name: "delete_item",
+			description: "Delete a file or folder from the vault and remove its indexed chunks by file ID.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					path: { type: "string", description: "Relative path to delete." },
+					relative_path: { type: "string", description: "Alias for path." },
+					file_id: { type: "string", description: "Stable file ID to resolve before delete." },
+					fileId: { type: "string", description: "Alias for file_id." },
+				},
+				required: ["path"],
+				additionalProperties: true,
+			},
+		},
+		{
+			name: "get_item_metadata",
+			description: "Return metadata for a file or folder in the vault without reading its content.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					path: { type: "string", description: "Relative path." },
+					relative_path: { type: "string", description: "Alias for path." },
+					file_id: { type: "string", description: "Stable file ID to resolve before fetching metadata." },
+					fileId: { type: "string", description: "Alias for file_id." },
+				},
+				required: ["path"],
+				additionalProperties: true,
+			},
+		},
+		{
+			name: "list_folder_contents",
+			description: "List the immediate children of a folder in the vault.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					path: { type: "string", description: "Relative folder path." },
+				},
+				additionalProperties: true,
+			},
+		},
+		{
+			name: "exists_item",
+			description: "Check whether a file or folder exists in the vault.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					path: { type: "string", description: "Relative path." },
+					relative_path: { type: "string", description: "Alias for path." },
+					file_id: { type: "string", description: "Stable file ID to resolve before checking existence." },
+					fileId: { type: "string", description: "Alias for file_id." },
+				},
+				required: ["path"],
+				additionalProperties: true,
+			},
+		},
 	];
 }

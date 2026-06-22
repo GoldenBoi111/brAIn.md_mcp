@@ -84,6 +84,10 @@ function tokenRecordSchema(): Schema {
 			tenant_id: { type: "string" },
 			token_name: { type: "string" },
 			subject: { type: "string" },
+			description: { type: "string" },
+			avatar_url: { type: "string" },
+			avatar_alt: { type: "string" },
+			avatar_background: { type: "string" },
 			scopes: arraySchema({ type: "string" }),
 			read_roots: arraySchema({ type: "string" }),
 			write_roots: arraySchema({ type: "string" }),
@@ -92,7 +96,7 @@ function tokenRecordSchema(): Schema {
 			updated_at: { type: "number" },
 			expires_at: { type: "number" },
 		},
-		["token_id", "tenant_id", "token_name", "subject", "scopes", "read_roots", "write_roots", "locked_paths", "created_at", "updated_at", "expires_at"],
+		["token_id", "tenant_id", "token_name", "subject", "description", "avatar_url", "avatar_alt", "avatar_background", "scopes", "read_roots", "write_roots", "locked_paths", "created_at", "updated_at", "expires_at"],
 		"TokenLockRecord"
 	);
 }
@@ -105,6 +109,9 @@ function fileNodeSchema(): Schema {
 			kind: { type: "string", enum: ["file", "folder"] },
 			locked: { type: "boolean" },
 			fileId: { anyOf: [{ type: "string" }, { type: "null" }] },
+			folderId: { anyOf: [{ type: "string" }, { type: "null" }] },
+			file_id: { anyOf: [{ type: "string" }, { type: "null" }] },
+			folder_id: { anyOf: [{ type: "string" }, { type: "null" }] },
 			sizeBytes: { anyOf: [{ type: "number" }, { type: "null" }] },
 			createdAt: { anyOf: [{ type: "number" }, { type: "null" }] },
 			modifiedAt: { anyOf: [{ type: "number" }, { type: "null" }] },
@@ -127,6 +134,7 @@ function fileMetadataSchema(): Schema {
 			created_at: { type: "number" },
 			modified_at: { type: "number" },
 			file_id: { anyOf: [{ type: "string" }, { type: "null" }] },
+			folder_id: { anyOf: [{ type: "string" }, { type: "null" }] },
 			content: { anyOf: [{ type: "string" }, { type: "null" }] },
 		},
 		["relative_path", "file_location", "kind", "exists", "locked", "created_at", "modified_at", "content"],
@@ -142,6 +150,9 @@ function listItemSchema(): Schema {
 			kind: { type: "string", enum: ["file", "folder"] },
 			locked: { type: "boolean" },
 			fileId: { anyOf: [{ type: "string" }, { type: "null" }] },
+			folderId: { anyOf: [{ type: "string" }, { type: "null" }] },
+			file_id: { anyOf: [{ type: "string" }, { type: "null" }] },
+			folder_id: { anyOf: [{ type: "string" }, { type: "null" }] },
 			sizeBytes: { anyOf: [{ type: "number" }, { type: "null" }] },
 			modifiedAt: { anyOf: [{ type: "number" }, { type: "null" }] },
 		},
@@ -273,7 +284,8 @@ function openApiBase(): Schema {
 						created: { type: "boolean" },
 						kind: { type: "string", enum: ["file", "folder"] },
 						path: { type: "string" },
-						file_id: { type: "string" },
+						file_id: { anyOf: [{ type: "string" }, { type: "null" }] },
+						folder_id: { anyOf: [{ type: "string" }, { type: "null" }] },
 						content: { anyOf: [{ type: "string" }, { type: "null" }] },
 					},
 					["created", "kind", "path"],
@@ -292,7 +304,8 @@ function openApiBase(): Schema {
 				FileUpdateResponse: objectSchema(
 					{
 						updated: { type: "boolean" },
-						file_id: { type: "string" },
+						file_id: { anyOf: [{ type: "string" }, { type: "null" }] },
+						folder_id: { anyOf: [{ type: "string" }, { type: "null" }] },
 						path: { type: "string" },
 						metadata: { $ref: "#/components/schemas/FileMetadata" },
 						content: { anyOf: [{ type: "string" }, { type: "null" }] },
@@ -303,7 +316,8 @@ function openApiBase(): Schema {
 				FileDeleteResponse: objectSchema(
 					{
 						deleted: { type: "boolean" },
-						file_id: { type: "string" },
+						file_id: { anyOf: [{ type: "string" }, { type: "null" }] },
+						folder_id: { anyOf: [{ type: "string" }, { type: "null" }] },
 						path: { type: "string" },
 					},
 					["deleted", "file_id", "path"],
@@ -363,9 +377,36 @@ function openApiBase(): Schema {
 						ttl_days: { type: "number" },
 						issuer: { type: "string" },
 						audience: { type: "string" },
+						providerName: { type: "string" },
+						provider_name: { type: "string" },
+						description: { type: "string" },
+						avatarUrl: { type: "string" },
+						avatar_url: { type: "string" },
+						avatarAlt: { type: "string" },
+						avatar_alt: { type: "string" },
+						avatarBackground: { type: "string" },
+						avatar_background: { type: "string" },
 					},
 					["subject"],
 					"TokenCreateRequest"
+				),
+				TokenUpdateRequest: objectSchema(
+					{
+						tokenName: { type: "string" },
+						token_name: { type: "string" },
+						providerName: { type: "string" },
+						provider_name: { type: "string" },
+						description: { type: "string" },
+						avatarUrl: { type: "string" },
+						avatar_url: { type: "string" },
+						avatarAlt: { type: "string" },
+						avatar_alt: { type: "string" },
+						avatarBackground: { type: "string" },
+						avatar_background: { type: "string" },
+						revoked: { type: "boolean" },
+					},
+					[],
+					"TokenUpdateRequest"
 				),
 				TokenCreateResponse: objectSchema(
 					{
@@ -389,6 +430,25 @@ function openApiBase(): Schema {
 					"TokenListResponse"
 				),
 				TokenRecord: tokenRecordSchema(),
+				TokenDetailResponse: objectSchema(
+					{
+						api_version: { type: "string" },
+						tenant_id: { type: "string" },
+						token: { $ref: "#/components/schemas/TokenRecord" },
+					},
+					["api_version", "tenant_id", "token"],
+					"TokenDetailResponse"
+				),
+				TokenDeleteResponse: objectSchema(
+					{
+						api_version: { type: "string" },
+						tenant_id: { type: "string" },
+						deleted: { type: "boolean" },
+						token_id: { type: "string" },
+					},
+					["api_version", "tenant_id", "deleted", "token_id"],
+					"TokenDeleteResponse"
+				),
 				UserListResponse: objectSchema(
 					{
 						api_version: { type: "string" },
@@ -562,12 +622,12 @@ function routeDocs(): Record<string, Schema> {
 			}),
 		},
 		"/files/{id}": {
-			get: pathItem("Read file", "Fetch a file or folder by stable file id.", ["Vault"], undefined, { 200: response({ $ref: "#/components/schemas/FileMetadata" }) }),
-			put: pathItem("Update file", "Move or edit a file by stable file id.", ["Vault"], { content: { "application/json": { schema: { $ref: "#/components/schemas/FileUpdateRequest" } } } }, {
+			get: pathItem("Read file", "Fetch a file or folder by stable file_id or folder_id.", ["Vault"], undefined, { 200: response({ $ref: "#/components/schemas/FileMetadata" }) }),
+			put: pathItem("Update file", "Move or edit a file or folder by stable file_id or folder_id.", ["Vault"], { content: { "application/json": { schema: { $ref: "#/components/schemas/FileUpdateRequest" } } } }, {
 				200: response({ $ref: "#/components/schemas/FileUpdateResponse" }),
 				...authErrorResponses(),
 			}),
-			delete: pathItem("Delete file", "Delete a file or folder by stable file id.", ["Vault"], undefined, {
+			delete: pathItem("Delete file", "Delete a file or folder by stable file_id or folder_id.", ["Vault"], undefined, {
 				200: response({ $ref: "#/components/schemas/FileDeleteResponse" }),
 				...authErrorResponses(),
 			}),
@@ -576,11 +636,11 @@ function routeDocs(): Record<string, Schema> {
 			get: pathItem("List vault locks", "List lock entries visible to the current session.", ["Vault"], undefined, {
 				200: response({ $ref: "#/components/schemas/VaultLocksResponse" }),
 			}),
-			post: pathItem("Lock paths", "Lock one or more vault paths.", ["Vault"], { content: { "application/json": { schema: objectSchema({ path: { type: "string" }, paths: arraySchema({ type: "string" }), file_id: { type: "string" }, file_ids: arraySchema({ type: "string" }) }, [], "LockPathsRequest") } } }, {
+			post: pathItem("Lock paths", "Lock one or more vault paths.", ["Vault"], { content: { "application/json": { schema: objectSchema({ path: { type: "string" }, paths: arraySchema({ type: "string" }), file_id: { type: "string" }, file_ids: arraySchema({ type: "string" }), folder_id: { type: "string" }, folder_ids: arraySchema({ type: "string" }) }, [], "LockPathsRequest") } } }, {
 				200: response({ $ref: "#/components/schemas/VaultLocksResponse" }),
 				...authErrorResponses(),
 			}),
-			delete: pathItem("Unlock paths", "Unlock one or more vault paths.", ["Vault"], { content: { "application/json": { schema: objectSchema({ path: { type: "string" }, paths: arraySchema({ type: "string" }), file_id: { type: "string" }, file_ids: arraySchema({ type: "string" }) }, [], "UnlockPathsRequest") } } }, {
+			delete: pathItem("Unlock paths", "Unlock one or more vault paths.", ["Vault"], { content: { "application/json": { schema: objectSchema({ path: { type: "string" }, paths: arraySchema({ type: "string" }), file_id: { type: "string" }, file_ids: arraySchema({ type: "string" }), folder_id: { type: "string" }, folder_ids: arraySchema({ type: "string" }) }, [], "UnlockPathsRequest") } } }, {
 				200: response({ $ref: "#/components/schemas/VaultLocksResponse" }),
 				...authErrorResponses(),
 			}),
@@ -605,6 +665,20 @@ function routeDocs(): Record<string, Schema> {
 				...authErrorResponses(),
 			}),
 		},
+		"/tokens/{tokenId}": {
+			get: pathItem("Get token", "Fetch one MCP token record for the current tenant.", ["Tokens"], undefined, {
+				200: response({ $ref: "#/components/schemas/TokenDetailResponse" }),
+				...authErrorResponses(),
+			}),
+			patch: pathItem("Update token", "Update token metadata and visual identity fields.", ["Tokens"], { content: { "application/json": { schema: { $ref: "#/components/schemas/TokenUpdateRequest" } } } }, {
+				200: response({ $ref: "#/components/schemas/TokenDetailResponse" }),
+				...authErrorResponses(),
+			}),
+			delete: pathItem("Delete token", "Revoke and remove a token record for the current tenant.", ["Tokens"], undefined, {
+				200: response({ $ref: "#/components/schemas/TokenDeleteResponse" }),
+				...authErrorResponses(),
+			}),
+		},
 		"/mcp/token": {
 			post: pathItem("Create MCP token", "Issue a token through the MCP token route.", ["Tokens"], { content: { "application/json": { schema: { $ref: "#/components/schemas/TokenCreateRequest" } } } }, {
 				200: response({ $ref: "#/components/schemas/TokenCreateResponse" }),
@@ -615,11 +689,11 @@ function routeDocs(): Record<string, Schema> {
 			get: pathItem("Get token locks", "Read mutable lock state for a specific MCP token.", ["Tokens"], undefined, {
 				200: response(objectSchema({ token_id: { type: "string" }, tenant_id: { type: "string" }, token_name: { type: "string" }, subject: { type: "string" }, scopes: arraySchema({ type: "string" }), scope_path: { type: "string" }, count: { type: "number" }, locked_paths: arraySchema({ type: "string" }) }, ["token_id", "tenant_id", "token_name", "subject", "scopes", "scope_path", "count", "locked_paths"], "TokenLocksResponse")),
 			}),
-			post: pathItem("Lock token paths", "Add mutable locks to a specific MCP token.", ["Tokens"], { content: { "application/json": { schema: objectSchema({ path: { type: "string" }, paths: arraySchema({ type: "string" }), file_id: { type: "string" }, file_ids: arraySchema({ type: "string" }) }, [], "TokenLockPathsRequest") } } }, {
+			post: pathItem("Lock token paths", "Add mutable locks to a specific MCP token.", ["Tokens"], { content: { "application/json": { schema: objectSchema({ path: { type: "string" }, paths: arraySchema({ type: "string" }), file_id: { type: "string" }, file_ids: arraySchema({ type: "string" }), folder_id: { type: "string" }, folder_ids: arraySchema({ type: "string" }) }, [], "TokenLockPathsRequest") } } }, {
 				200: response(objectSchema({ token_id: { type: "string" }, tenant_id: { type: "string" }, action: { type: "string" }, count: { type: "number" }, changed: { type: "number" }, results: arraySchema(objectSchema({ path: { type: "string" }, locked: { type: "boolean" }, changed: { type: "boolean" } }, ["path", "locked", "changed"], "TokenLockMutationResult")), locked_paths: arraySchema({ type: "string" }) }, ["token_id", "tenant_id", "action", "count", "changed", "results", "locked_paths"], "TokenLockMutationResponse")),
 				...authErrorResponses(),
 			}),
-			delete: pathItem("Unlock token paths", "Remove mutable locks from a specific MCP token.", ["Tokens"], { content: { "application/json": { schema: objectSchema({ path: { type: "string" }, paths: arraySchema({ type: "string" }), file_id: { type: "string" }, file_ids: arraySchema({ type: "string" }) }, [], "TokenUnlockPathsRequest") } } }, {
+			delete: pathItem("Unlock token paths", "Remove mutable locks from a specific MCP token.", ["Tokens"], { content: { "application/json": { schema: objectSchema({ path: { type: "string" }, paths: arraySchema({ type: "string" }), file_id: { type: "string" }, file_ids: arraySchema({ type: "string" }), folder_id: { type: "string" }, folder_ids: arraySchema({ type: "string" }) }, [], "TokenUnlockPathsRequest") } } }, {
 				200: response(objectSchema({ token_id: { type: "string" }, tenant_id: { type: "string" }, action: { type: "string" }, count: { type: "number" }, changed: { type: "number" }, results: arraySchema(objectSchema({ path: { type: "string" }, locked: { type: "boolean" }, changed: { type: "boolean" } }, ["path", "locked", "changed"], "TokenUnlockMutationResult")), locked_paths: arraySchema({ type: "string" }) }, ["token_id", "tenant_id", "action", "count", "changed", "results", "locked_paths"], "TokenUnlockMutationResponse")),
 				...authErrorResponses(),
 			}),

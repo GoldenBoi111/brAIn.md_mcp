@@ -6,6 +6,7 @@ import {
   createVault,
   getVaultUsageBytes,
   ensureFileId,
+  ensureFolderId,
   listFolderContents,
   loadLockSet,
   pathWithinRoots,
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
     const vaultRoot = await createVault(claims.tenantId);
     if (kind === "folder") {
       const folderPath = await createFolder(vaultRoot, await loadLockSet(vaultRoot), relativePath);
-      return NextResponse.json({ created: true, kind: "folder", path: folderPath });
+      return NextResponse.json({ created: true, kind: "folder", path: folderPath, file_id: null, folder_id: await ensureFolderId(vaultRoot, relativePath) });
     }
 
     const filePath = await writeFile(vaultRoot, await loadLockSet(vaultRoot), relativePath, content);
@@ -93,6 +94,7 @@ export async function POST(request: Request) {
       kind: "file",
       path: filePath,
       file_id: fileId,
+      folder_id: null,
       content: await readFile(vaultRoot, await loadLockSet(vaultRoot), relativePath),
     });
   } catch (error) {

@@ -4,6 +4,7 @@ import {
   createVault,
   getLockedPaths,
   getPathForFileId,
+  getPathForFolderId,
   lockPath,
   pathWithinRoots,
   unlockPath,
@@ -36,12 +37,12 @@ async function resolvePathForFileId(vaultRoot: string, fileId: string): Promise<
   return relativePath;
 }
 
-async function resolveRequestedPath(vaultRoot: string, body: Record<string, unknown>): Promise<string | null> {
-  const fileId = asString(body.file_id);
-  if (fileId) {
-    return resolvePathForFileId(vaultRoot, fileId);
+async function resolvePathForFolderId(vaultRoot: string, folderId: string): Promise<string> {
+  const relativePath = await getPathForFolderId(vaultRoot, folderId);
+  if (!relativePath) {
+    throw new BackendError(`Unknown folder_id: ${folderId}`, 404);
   }
-  return asString(body.path);
+  return relativePath;
 }
 
 function uniqueStrings(values: string[]): string[] {
@@ -60,6 +61,11 @@ function collectPaths(vaultRoot: string, body: Record<string, unknown>): Promise
     tasks.push(resolvePathForFileId(vaultRoot, directFileId).then((path) => [path]));
   }
 
+  const directFolderId = asString(body.folder_id);
+  if (directFolderId) {
+    tasks.push(resolvePathForFolderId(vaultRoot, directFolderId).then((path) => [path]));
+  }
+
   const paths = Array.isArray(body.paths) ? body.paths : [];
   if (paths.length) {
     tasks.push(
@@ -73,7 +79,11 @@ function collectPaths(vaultRoot: string, body: Record<string, unknown>): Promise
           if (fileId) {
             return resolvePathForFileId(vaultRoot, fileId);
           }
-          throw new BackendError("Each lock target must be a path or file_id", 400);
+          const folderId = typeof value === "object" && value !== null ? asString((value as Record<string, unknown>).folder_id) : null;
+          if (folderId) {
+            return resolvePathForFolderId(vaultRoot, folderId);
+          }
+          throw new BackendError("Each lock target must be a path, file_id, or folder_id", 400);
         })
       )
     );
@@ -89,6 +99,21 @@ function collectPaths(vaultRoot: string, body: Record<string, unknown>): Promise
             throw new BackendError("Each file_id must be a non-empty string", 400);
           }
           return resolvePathForFileId(vaultRoot, fileId);
+        })
+      )
+    );
+  }
+
+  const folderIds = Array.isArray(body.folder_ids) ? body.folder_ids : [];
+  if (folderIds.length) {
+    tasks.push(
+      Promise.all(
+        folderIds.map(async (value) => {
+          const folderId = asString(value);
+          if (!folderId) {
+            throw new BackendError("Each folder_id must be a non-empty string", 400);
+          }
+          return resolvePathForFolderId(vaultRoot, folderId);
         })
       )
     );
@@ -120,7 +145,8 @@ export async function GET(request: Request) {
     const vaultRoot = await createVault(claims.tenantId);
     const requestedPath = normalizeScopePath(url.searchParams.get("path"));
     const requestedFileId = asString(url.searchParams.get("file_id"));
-    const scopePath = requestedFileId ? await resolvePathForFileId(vaultRoot, requestedFileId) : requestedPath;
+    const requestedFolderId = asString(url.searchParams.get("folder_id"));
+    const scopePath = requestedFileId ? await resolvePathForFileId(vaultRoot, requestedFileId) : requestedFolderId ? await resolvePathForFolderId(vaultRoot, requestedFolderId) : requestedPath;
 
     if (!pathWithinRoots(scopePath, claims.readRoots)) {
       throw new BackendError(`Read is restricted outside the token's allowed folders: ${scopePath}`, 403);

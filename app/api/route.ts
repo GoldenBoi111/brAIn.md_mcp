@@ -10,13 +10,20 @@ export function GET() {
 		versioned_root: `/api/${API_VERSION}`,
 		routes: [
 			"/health",
+			"/.well-known/oauth-authorization-server",
+			"/.well-known/oauth-protected-resource",
+			"/.well-known/openid-configuration",
+			"/oauth/register",
+			"/oauth/authorize",
+			"/oauth/token",
+			"/oauth/userinfo",
 			"/vault/locks",
 			"/vault/usage",
 			"/vault/reindex",
 			"/tokens",
+			"/tokens/{tokenId}",
 			"/users",
 			"/openapi",
 		],
 	});
 }
-

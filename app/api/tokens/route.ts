@@ -43,6 +43,11 @@ export async function POST(request: Request) {
 			ttlDays: body.ttlDays,
 			issuer: body.issuer,
 			audience: body.audience,
+			providerName: body.providerName,
+			description: body.description,
+			avatarUrl: body.avatarUrl,
+			avatarAlt: body.avatarAlt,
+			avatarBackground: body.avatarBackground,
 		});
 		const tokenClaims = await verifyToken(token);
 		return NextResponse.json({

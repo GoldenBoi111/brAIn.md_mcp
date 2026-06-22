@@ -270,43 +270,96 @@ async function callTool(claims: Awaited<ReturnType<typeof requireClaims>>, token
 }
 
 export async function POST(request: Request) {
+  const challenge = 'Bearer realm="brAIn.md", error="invalid_token", error_description="Missing bearer token", resource_metadata="/.well-known/oauth-protected-resource/mcp"';
+  if (!bearerToken(request)) {
+    return NextResponse.json(
+      { error: "Missing bearer token" },
+      { status: 401, headers: { "WWW-Authenticate": challenge } },
+    );
+  }
   try {
     const claims = await requireClaims(request);
     const tokenLocks = new Set(await getTokenLockedPaths(claims.jwtId));
     const body = (await request.json().catch(() => ({}))) as JsonRpcRequest;
+    const id = body.id ?? null;
+    const method = String(body.method ?? "");
 
-    if (body.method === "initialize") {
+    if (!method) {
       return NextResponse.json({
         jsonrpc: "2.0",
-        id: body.id ?? null,
+        id,
+        error: { code: -32600, message: "Invalid Request" },
+      });
+    }
+
+    if (method === "initialize") {
+      return NextResponse.json({
+        jsonrpc: "2.0",
+        id,
         result: {
           protocolVersion: "2024-11-05",
           serverInfo: { name: "brAIn.md MCP Server", version: "0.1.0" },
-          capabilities: { tools: { listChanged: false } },
+          capabilities: {
+            tools: { listChanged: false },
+            resources: { listChanged: false },
+            prompts: { listChanged: false },
+          },
         },
       });
     }
 
-    if (body.method === "tools/list") {
+    if (method === "notifications/initialized") {
+      return new NextResponse(null, { status: 204 });
+    }
+
+    if (method === "ping") {
       return NextResponse.json({
         jsonrpc: "2.0",
-        id: body.id ?? null,
+        id,
+        result: {},
+      });
+    }
+
+    if (method === "tools/list") {
+      return NextResponse.json({
+        jsonrpc: "2.0",
+        id,
         result: { tools: buildTools() },
       });
     }
 
-    if (body.method === "tools/call") {
+    if (method === "resources/list") {
+      return NextResponse.json({
+        jsonrpc: "2.0",
+        id,
+        result: { resources: [] },
+      });
+    }
+
+    if (method === "prompts/list") {
+      return NextResponse.json({
+        jsonrpc: "2.0",
+        id,
+        result: { prompts: [] },
+      });
+    }
+
+    if (method === "tools/call") {
       const name = String(body.params?.name ?? "");
       const args = (body.params?.arguments ?? {}) as Record<string, unknown>;
       const result = await callTool(claims, tokenLocks, name, args);
       return NextResponse.json({
         jsonrpc: "2.0",
-        id: body.id ?? null,
+        id,
         result: { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], structuredContent: result },
       });
     }
 
-    throw new BackendError("Unsupported MCP method", 400);
+    return NextResponse.json({
+      jsonrpc: "2.0",
+      id,
+      error: { code: -32601, message: `Method not found: ${method}` },
+    });
   } catch (error) {
     return errorResponse(error);
   }

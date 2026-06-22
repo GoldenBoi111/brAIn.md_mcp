@@ -63,7 +63,7 @@ function nowSeconds(): number {
 }
 
 async function readStore(): Promise<AuthStore> {
-  const authStorePath = process.env.USER_AUTH_STORE_PATH ?? "C:\\tmp\\brAIn.md MCP Server\\auth\\users.json";
+  const authStorePath = process.env.USER_AUTH_STORE_PATH ?? path.join(process.cwd(), ".auth", "users.json");
   try {
     const raw = await fs.readFile(authStorePath, "utf8");
     const parsed = JSON.parse(raw) as Partial<AuthStore>;
@@ -77,8 +77,8 @@ async function readStore(): Promise<AuthStore> {
 }
 
 async function writeStore(store: AuthStore): Promise<void> {
-  const authStoreDir = process.env.USER_AUTH_STORE_DIR ?? "C:\\tmp\\brAIn.md MCP Server\\auth";
-  const authStorePath = process.env.USER_AUTH_STORE_PATH ?? "C:\\tmp\\brAIn.md MCP Server\\auth\\users.json";
+  const authStorePath = process.env.USER_AUTH_STORE_PATH ?? path.join(process.cwd(), ".auth", "users.json");
+  const authStoreDir = process.env.USER_AUTH_STORE_DIR ?? path.dirname(authStorePath);
   await fs.mkdir(authStoreDir, { recursive: true });
   const tmp = `${authStorePath}.tmp`;
   await fs.writeFile(tmp, JSON.stringify(store, null, 2) + "\n", "utf8");
@@ -294,12 +294,12 @@ export async function requireUserSession(request: Request): Promise<AuthSessionC
 
 export function sessionCookie(token: string): string {
   const maxAge = SESSION_TTL_SECONDS;
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-  return `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAge}${secure}`;
+  const secure = process.env.NODE_ENV === "production" || process.env.NEXT_PUBLIC_APP_URL?.startsWith("https://") ? "; Secure" : "";
+  return `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=None; Max-Age=${maxAge}${secure}`;
 }
 
 export function clearSessionCookie(): string {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-  return `${SESSION_COOKIE_NAME}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0${secure}`;
+  const secure = process.env.NODE_ENV === "production" || process.env.NEXT_PUBLIC_APP_URL?.startsWith("https://") ? "; Secure" : "";
+  return `${SESSION_COOKIE_NAME}=; HttpOnly; Path=/; SameSite=None; Max-Age=0${secure}`;
 }
 

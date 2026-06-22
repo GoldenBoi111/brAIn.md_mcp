@@ -74,6 +74,11 @@ export type TokenCreateInput = {
 	ttlDays?: number;
 	issuer?: string;
 	audience?: string;
+	providerName?: string;
+	description?: string;
+	avatarUrl?: string;
+	avatarAlt?: string;
+	avatarBackground?: string;
 };
 
 export function validateTokenCreateBody(body: JsonObject): TokenCreateInput {
@@ -92,7 +97,58 @@ export function validateTokenCreateBody(body: JsonObject): TokenCreateInput {
 		ttlDays: Number.isFinite(Number(body.ttlDays ?? body.ttl_days)) ? Number(body.ttlDays ?? body.ttl_days) : undefined,
 		issuer: asTrimmedString(body.issuer) ?? undefined,
 		audience: asTrimmedString(body.audience) ?? undefined,
+		providerName: asTrimmedString(body.providerName ?? body.provider_name) ?? undefined,
+		description: asTrimmedString(body.description) ?? undefined,
+		avatarUrl: asTrimmedString(body.avatarUrl ?? body.avatar_url) ?? undefined,
+		avatarAlt: asTrimmedString(body.avatarAlt ?? body.avatar_alt) ?? undefined,
+		avatarBackground: asTrimmedString(body.avatarBackground ?? body.avatar_background) ?? undefined,
 	};
+}
+
+export type TokenUpdateInput = {
+	tokenName?: string;
+	subject?: string;
+	scopes?: string[];
+	readRoots?: string[];
+	writeRoots?: string[];
+	issuer?: string;
+	audience?: string;
+	providerName?: string;
+	description?: string;
+	avatarUrl?: string;
+	avatarAlt?: string;
+	avatarBackground?: string;
+	revoked?: boolean;
+};
+
+export function validateTokenUpdateBody(body: JsonObject): TokenUpdateInput {
+	const result: TokenUpdateInput = {};
+	const tokenName = asTrimmedString(body.tokenName ?? body.token_name);
+	const subject = asTrimmedString(body.subject);
+	const scopes = body.scopes;
+	const readRoots = body.readRoots ?? body.read_roots;
+	const writeRoots = body.writeRoots ?? body.write_roots;
+	if (tokenName !== null) result.tokenName = tokenName;
+	if (subject !== null) result.subject = subject;
+	if (Array.isArray(scopes)) result.scopes = asStringArray(scopes);
+	if (Array.isArray(readRoots)) result.readRoots = asStringArray(readRoots);
+	if (Array.isArray(writeRoots)) result.writeRoots = asStringArray(writeRoots);
+	const issuer = asTrimmedString(body.issuer);
+	const audience = asTrimmedString(body.audience);
+	const providerName = asTrimmedString(body.providerName ?? body.provider_name);
+	const description = asTrimmedString(body.description);
+	const avatarUrl = asTrimmedString(body.avatarUrl ?? body.avatar_url);
+	const avatarAlt = asTrimmedString(body.avatarAlt ?? body.avatar_alt);
+	const avatarBackground = asTrimmedString(body.avatarBackground ?? body.avatar_background);
+	if (issuer !== null) result.issuer = issuer;
+	if (audience !== null) result.audience = audience;
+	if (providerName !== null) result.providerName = providerName;
+	if (description !== null) result.description = description;
+	if (avatarUrl !== null) result.avatarUrl = avatarUrl;
+	if (avatarAlt !== null) result.avatarAlt = avatarAlt;
+	if (avatarBackground !== null) result.avatarBackground = avatarBackground;
+	if (typeof body.revoked === "boolean") result.revoked = body.revoked;
+	return result;
 }
 
 export type UserCreateInput = {

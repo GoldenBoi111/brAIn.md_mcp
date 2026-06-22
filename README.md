@@ -15,6 +15,7 @@ The current backend includes:
 - Session-based login, logout, and session lookup
 - Protected REST endpoints for file and search operations
 - MCP token issuance from the UI side
+- OAuth bridge routes for Claude web
 - MCP JSON-RPC transport at `/mcp`
 - Stable `file_id` cataloging
 - Local vault storage with a 100 MB per-vault size limit
@@ -29,6 +30,11 @@ The important design split is:
 - LLM and tool actions use an MCP JWT
 
 The LLM does not mint its own token. The user mints an MCP token in the UI, then copies that token into the model's MCP configuration.
+
+Claude web can also connect through the OAuth bridge in this repo. The bridge registers Claude as an OAuth client, exchanges the authorization code, and returns the same signed MCP JWT that `/mcp` already expects.
+
+For a full route-by-route reference, see [docs/API_REFERENCE.md](./docs/API_REFERENCE.md).
+For a user-focused connector setup guide, see [docs/CONNECTOR_SETUP_FOR_USERS.md](./docs/CONNECTOR_SETUP_FOR_USERS.md).
 
 ## Architecture Overview
 
@@ -102,6 +108,43 @@ Supported JSON-RPC methods:
 - `tools/call`
 
 The MCP tool surface is defined centrally in [`app/lib/backend.ts`](./app/lib/backend.ts).
+
+### OAuth bridge for Claude web
+
+These routes make the server look like an OAuth-enabled MCP provider:
+
+- `GET /.well-known/oauth-authorization-server`
+- `GET /.well-known/mcp.json`
+- `POST /oauth/register`
+- `GET /oauth/authorize`
+- `POST /oauth/token`
+
+The bridge is intentionally thin:
+
+- Claude registers a client or reuses a saved one
+- the authorization code is tied to your existing session and tenant
+- the token endpoint returns the same signed MCP JWT that `/mcp` already accepts
+
+Example dynamic client registration:
+
+```json
+{
+  "client_name": "Claude web",
+  "redirect_uris": ["https://example.claude.ai/oauth/callback"],
+  "token_endpoint_auth_method": "client_secret_basic"
+}
+```
+
+Recommended fields for Claude web:
+
+- Authorization server / issuer: `http(s)://<your-host>`
+- Authorization URL: `http(s)://<your-host>/oauth/authorize`
+- Token URL: `http(s)://<your-host>/oauth/token`
+- Registration URL: `http(s)://<your-host>/oauth/register`
+- Scope: `mcp`
+- Client auth method: `client_secret_basic` or `client_secret_post`
+
+The OAuth client records are stored in `.auth/claude-oauth.json`.
 
 ## Authentication Architecture
 

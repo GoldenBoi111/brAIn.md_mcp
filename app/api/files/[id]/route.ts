@@ -5,6 +5,7 @@ import {
   deletePath,
   getItemMetadata,
   getPathForFileId,
+  getPathForFolderId,
   loadLockSet,
   listFileIdsUnderPath,
   movePath,
@@ -32,12 +33,16 @@ function errorResponse(error: unknown): NextResponse {
   return NextResponse.json({ error: message }, { status: 500 });
 }
 
-async function resolveFile(vaultRoot: string, fileId: string): Promise<string> {
-  const rel = await getPathForFileId(vaultRoot, fileId);
-  if (!rel) {
-    throw new BackendError(`Unknown file_id: ${fileId}`, 404);
+async function resolveItem(vaultRoot: string, itemId: string): Promise<{ path: string; kind: "file" | "folder" }> {
+  const filePath = await getPathForFileId(vaultRoot, itemId);
+  if (filePath) {
+    return { path: filePath, kind: "file" };
   }
-  return rel;
+  const folderPath = await getPathForFolderId(vaultRoot, itemId);
+  if (folderPath) {
+    return { path: folderPath, kind: "folder" };
+  }
+  throw new BackendError(`Unknown file_id or folder_id: ${itemId}`, 404);
 }
 
 export async function GET(request: Request, { params }: Params) {
@@ -45,14 +50,15 @@ export async function GET(request: Request, { params }: Params) {
     const { id } = await params;
     const claims = await requireUserSession(request);
     const vaultRoot = await createVault(claims.tenantId);
-    const relativePath = await resolveFile(vaultRoot, id);
+    const resolved = await resolveItem(vaultRoot, id);
+    const relativePath = resolved.path;
     if (!pathWithinRoots(relativePath, claims.readRoots)) {
       throw new BackendError(`Read is restricted outside the token's allowed folders: ${relativePath}`, 403);
     }
 
     const metadata = await getItemMetadata(vaultRoot, relativePath);
     const content = metadata.kind === "file" ? await readFile(vaultRoot, await loadLockSet(vaultRoot), relativePath) : null;
-    return NextResponse.json({ ...metadata, content });
+    return NextResponse.json({ ...metadata, file_id: metadata.kind === "file" ? id : null, folder_id: metadata.kind === "folder" ? id : null, content });
   } catch (error) {
     return errorResponse(error);
   }
@@ -65,7 +71,8 @@ export async function PUT(request: Request, { params }: Params) {
     const body: any = await request.json().catch(() => ({}));
     const vaultRoot = await createVault(claims.tenantId);
     const locks = await loadLockSet(vaultRoot);
-    const currentPath = await resolveFile(vaultRoot, id);
+    const resolved = await resolveItem(vaultRoot, id);
+    const currentPath = resolved.path;
     const nextPath = typeof body?.path === "string" && body.path.trim() ? String(body.path).trim() : currentPath;
 
     if (!pathWithinRoots(currentPath, claims.writeRoots)) {
@@ -81,6 +88,9 @@ export async function PUT(request: Request, { params }: Params) {
 
     const hasContent = Object.prototype.hasOwnProperty.call(body, "content");
     const appendMode = body?.append === true;
+    if (resolved.kind === "folder" && hasContent) {
+      throw new BackendError("Folders do not accept content updates", 400);
+    }
     if (hasContent) {
       const content = String(body?.content ?? "");
       if (appendMode) {
@@ -99,7 +109,8 @@ export async function PUT(request: Request, { params }: Params) {
     const metadata = await getItemMetadata(vaultRoot, nextPath);
     return NextResponse.json({
       updated: true,
-      file_id: id,
+      file_id: metadata.kind === "file" ? id : null,
+      folder_id: metadata.kind === "folder" ? id : null,
       path: nextPath,
       metadata,
       content: metadata.kind === "file" ? await readFile(vaultRoot, locks, nextPath) : null,
@@ -115,7 +126,8 @@ export async function DELETE(request: Request, { params }: Params) {
     const claims = await requireUserSession(request);
     const vaultRoot = await createVault(claims.tenantId);
     const locks = await loadLockSet(vaultRoot);
-    const relativePath = await resolveFile(vaultRoot, id);
+    const resolved = await resolveItem(vaultRoot, id);
+    const relativePath = resolved.path;
     if (!pathWithinRoots(relativePath, claims.writeRoots)) {
       throw new BackendError(`Write is restricted outside the token's allowed folders: ${relativePath}`, 403);
     }
@@ -125,7 +137,7 @@ export async function DELETE(request: Request, { params }: Params) {
     if (fileIds.length) {
       await Promise.all(fileIds.map((fileId) => qdrantDeleteFile(claims.tenantId, fileId)));
     }
-    return NextResponse.json({ deleted: true, file_id: id, path: relativePath });
+    return NextResponse.json({ deleted: true, file_id: resolved.kind === "file" ? id : null, folder_id: resolved.kind === "folder" ? id : null, path: relativePath });
   } catch (error) {
     return errorResponse(error);
   }
