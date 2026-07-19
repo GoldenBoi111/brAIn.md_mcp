@@ -190,6 +190,131 @@ async function saveCatalog(vaultRoot: string, catalog: Catalog): Promise<void> {
 	await atomicWrite(path.join(vaultRoot, CATALOG_FILE_NAME), JSON.stringify({ files: catalog.files, paths: catalog.paths, folders: catalog.folders, folder_paths: catalog.folder_paths, updated_at: nowSeconds() }, null, 2) + "\n");
 }
 
+export type CatalogRebuildResult = {
+	tenant_id: string;
+	vault_root: string;
+	files_scanned: number;
+	folders_scanned: number;
+	files_reused: number;
+	files_created: number;
+	folders_reused: number;
+	folders_created: number;
+	files_removed: number;
+	folders_removed: number;
+	updated_at: number;
+};
+
+function catalogTimestamps(stat: { birthtimeMs?: number | bigint; mtimeMs?: number | bigint } | undefined): { created_at: number; updated_at: number } {
+	const birthtime = typeof stat?.birthtimeMs === "bigint" ? Number(stat.birthtimeMs) : Number(stat?.birthtimeMs ?? Date.now());
+	const mtime = typeof stat?.mtimeMs === "bigint" ? Number(stat.mtimeMs) : Number(stat?.mtimeMs ?? Date.now());
+	return {
+		created_at: Math.floor(birthtime / 1000),
+		updated_at: Math.floor(mtime / 1000),
+	};
+}
+
+function isCatalogMetadataName(name: string): boolean {
+	return [LOCK_FILE_NAME, ROOT_MARKER_NAME, CATALOG_FILE_NAME].includes(name);
+}
+
+async function scanVaultFilesystem(vaultRoot: string): Promise<{ files: Array<{ path: string; stat: Awaited<ReturnType<typeof fs.stat>> }>; folders: Array<{ path: string; stat: Awaited<ReturnType<typeof fs.stat>> }> }> {
+	const files: Array<{ path: string; stat: Awaited<ReturnType<typeof fs.stat>> }> = [];
+	const folders: Array<{ path: string; stat: Awaited<ReturnType<typeof fs.stat>> }> = [];
+	const walk = async (absoluteDir: string, relativeDir: string): Promise<void> => {
+		const entries = await fs.readdir(absoluteDir, { withFileTypes: true });
+		for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+			if (isCatalogMetadataName(entry.name)) {
+				continue;
+			}
+			const nextRelative = relativeDir === "." ? entry.name : `${relativeDir}/${entry.name}`;
+			const nextAbsolute = path.join(absoluteDir, entry.name);
+			if (entry.isDirectory()) {
+				const stat = await fs.stat(nextAbsolute);
+				folders.push({ path: nextRelative, stat });
+				await walk(nextAbsolute, nextRelative);
+				continue;
+			}
+			if (entry.isFile()) {
+				const stat = await fs.stat(nextAbsolute);
+				files.push({ path: nextRelative, stat });
+			}
+		}
+	};
+	await walk(vaultRoot, ".");
+	return { files, folders };
+}
+
+export async function rebuildCatalogFromFilesystem(vaultRoot: string): Promise<CatalogRebuildResult> {
+	const existing = await loadCatalog(vaultRoot);
+	const scanned = await scanVaultFilesystem(vaultRoot);
+	const nextCatalog: Catalog = { files: {}, paths: {}, folders: {}, folder_paths: {}, updated_at: nowSeconds() };
+	const seenFileIds = new Set<string>();
+	const seenFolderIds = new Set<string>();
+	let filesReused = 0;
+	let filesCreated = 0;
+	let foldersReused = 0;
+	let foldersCreated = 0;
+
+	const folders = [...scanned.folders].sort((left, right) => left.path.split("/").length - right.path.split("/").length || left.path.localeCompare(right.path));
+	for (const folder of folders) {
+		const existingId = existing.folder_paths[folder.path];
+		const existingRecord = existingId ? existing.folders[existingId] : null;
+		const folderId = existingRecord ? existingId : randomUUID();
+		const timestamps = catalogTimestamps(folder.stat);
+		nextCatalog.folders[folderId] = {
+			path: folder.path,
+			created_at: existingRecord?.created_at ?? timestamps.created_at,
+			updated_at: timestamps.updated_at,
+		};
+		nextCatalog.folder_paths[folder.path] = folderId;
+		seenFolderIds.add(folderId);
+		if (existingRecord) {
+			foldersReused += 1;
+		} else {
+			foldersCreated += 1;
+		}
+	}
+
+	const files = [...scanned.files].sort((left, right) => left.path.localeCompare(right.path));
+	for (const file of files) {
+		const existingId = existing.paths[file.path];
+		const existingRecord = existingId ? existing.files[existingId] : null;
+		const fileId = existingRecord ? existingId : randomUUID();
+		const timestamps = catalogTimestamps(file.stat);
+		nextCatalog.files[fileId] = {
+			path: file.path,
+			created_at: existingRecord?.created_at ?? timestamps.created_at,
+			updated_at: timestamps.updated_at,
+		};
+		nextCatalog.paths[file.path] = fileId;
+		seenFileIds.add(fileId);
+		if (existingRecord) {
+			filesReused += 1;
+		} else {
+			filesCreated += 1;
+		}
+	}
+
+	await saveCatalog(vaultRoot, nextCatalog);
+
+	const filesRemoved = Object.keys(existing.files).filter((fileId) => !seenFileIds.has(fileId)).length;
+	const foldersRemoved = Object.keys(existing.folders).filter((folderId) => !seenFolderIds.has(folderId)).length;
+
+	return {
+		tenant_id: path.basename(vaultRoot),
+		vault_root: vaultRoot,
+		files_scanned: files.length,
+		folders_scanned: folders.length,
+		files_reused: filesReused,
+		files_created: filesCreated,
+		folders_reused: foldersReused,
+		folders_created: foldersCreated,
+		files_removed: filesRemoved,
+		folders_removed: foldersRemoved,
+		updated_at: nextCatalog.updated_at,
+	};
+}
+
 export async function createFileRecord(vaultRoot: string, relativePath: string): Promise<string> {
 	const rel = normalizeRelPath(relativePath);
 	const catalog = await loadCatalog(vaultRoot);

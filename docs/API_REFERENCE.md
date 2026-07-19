@@ -376,6 +376,43 @@ Request body:
 }
 ```
 
+#### `POST /api/admin/vault/catalog/rebuild`
+
+Admin-only filesystem repair job that rebuilds `.vault-index.json` from the on-disk vault contents.
+
+This is the endpoint to use after you manually add or delete files outside the API and want the catalog to match the real filesystem again.
+
+Request body:
+
+```json
+{
+  "tenantId": "62125fb6-c362-488a-a5d6-217d8d0006c2",
+  "userId": "e6c525fa-31d8-4e6d-9749-193aa4906326"
+}
+```
+
+Supported scope fields:
+
+- `tenantId` or `tenant_id`
+- `userId` or `user_id`
+
+If no tenant or user is provided, the route rebuilds every user vault.
+
+Response includes:
+
+- `api_version`
+- `scope`
+- `tenant_id` for single-vault rebuilds
+- `inspected_tenants` for the all-vault rebuild path
+- `files_scanned`
+- `folders_scanned`
+- `files_reused`
+- `files_created`
+- `folders_reused`
+- `folders_created`
+- `files_removed`
+- `folders_removed`
+
 #### `POST /api/admin/qdrant/reconcile`
 
 Admin-only repair job that checks whether each file in a tenant vault has Qdrant points and re-embeds any missing files.

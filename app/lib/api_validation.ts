@@ -204,3 +204,15 @@ export function validateQdrantReconcileBody(body: JsonObject): QdrantReconcileIn
 		repairMissing: typeof body.repairMissing === "boolean" ? body.repairMissing : true,
 	};
 }
+
+export type VaultCatalogRebuildInput = {
+	tenantId?: string;
+	userId?: string;
+};
+
+export function validateVaultCatalogRebuildBody(body: JsonObject): VaultCatalogRebuildInput {
+	return {
+		tenantId: asTrimmedString(body.tenantId ?? body.tenant_id) ?? undefined,
+		userId: asTrimmedString(body.userId ?? body.user_id) ?? undefined,
+	};
+}
