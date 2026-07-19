@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { API_VERSION } from "../../../../../lib/api_contract";
-import { BackendError } from "../../../../../lib/backend";
-import { parseJsonObject, validateQdrantReconcileBody } from "../../../../../lib/api_validation";
-import { reconcileAllUsersQdrantIndex, reconcileTenantByUserId, reconcileTenantQdrantIndex } from "../../../../../lib/qdrant_reconcile";
-import { requireUserSession } from "../../../../../lib/user_auth";
+import { API_VERSION } from "../../../../lib/api_contract";
+import { BackendError } from "../../../../lib/backend";
+import { parseJsonObject, validateQdrantReconcileBody } from "../../../../lib/api_validation";
+import { reconcileAllUsersQdrantIndex, reconcileTenantByUserId, reconcileTenantQdrantIndex } from "../../../../lib/qdrant_reconcile";
+import { requireUserSession } from "../../../../lib/user_auth";
 
 export const runtime = "nodejs";
 
