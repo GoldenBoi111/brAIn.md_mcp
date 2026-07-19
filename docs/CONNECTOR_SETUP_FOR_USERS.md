@@ -18,6 +18,7 @@ Use these exact endpoints:
 - OAuth registration: `https://mcp.brain-md.dev/oauth/register`
 
 Do not use the site root as the MCP server URL. The connector needs the `/mcp` path.
+Do not send local disk paths to the server. Every file and folder path must be relative to the user's vault root.
 
 ## Connecting Claude
 
@@ -66,6 +67,30 @@ When the login page appears, you may see two optional fields:
 - Provider name: the app name shown in the token list, such as `Claude` or `ChatGPT`
 
 These names help you identify tokens later in the admin UI.
+
+## How file paths should look
+
+Correct:
+
+```json
+{
+  "kind": "file",
+  "path": "projects/GoldenBoi111 repo deep dives.md",
+  "file_id": "dc5aea2b-dd6c-4947-a446-c8bf3bccb60c"
+}
+```
+
+Incorrect:
+
+```json
+{
+  "kind": "file",
+  "path": "C:\\Users\\Aruntej Thummepally\\Downloads\\transfer\\brAIn.md\\vaults\\62125fb6-c362-488a-a5d6-217d8d0006c2\\projects\\GoldenBoi111 repo deep dives.md",
+  "file_id": "dc5aea2b-dd6c-4947-a446-c8bf3bccb60c"
+}
+```
+
+The server rejects absolute OS paths, UNC paths, and parent-directory traversal. Treat the vault root as the only root.
 
 ## What happens after you connect
 

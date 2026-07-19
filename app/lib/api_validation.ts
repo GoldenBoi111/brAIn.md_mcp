@@ -186,3 +186,21 @@ export function validateReindexBody(body: JsonObject): ReindexInput {
 		embeddingModel: asTrimmedString(body.embedding_model ?? body.embeddingModel) ?? "jasper-token-compression-600m",
 	};
 }
+
+export type QdrantReconcileInput = {
+	tenantId?: string;
+	userId?: string;
+	path: string;
+	embeddingModel: string;
+	repairMissing: boolean;
+};
+
+export function validateQdrantReconcileBody(body: JsonObject): QdrantReconcileInput {
+	return {
+		tenantId: asTrimmedString(body.tenantId ?? body.tenant_id) ?? undefined,
+		userId: asTrimmedString(body.userId ?? body.user_id) ?? undefined,
+		path: validatePathScope(body.path),
+		embeddingModel: asTrimmedString(body.embedding_model ?? body.embeddingModel) ?? "jasper-token-compression-600m",
+		repairMissing: typeof body.repairMissing === "boolean" ? body.repairMissing : true,
+	};
+}

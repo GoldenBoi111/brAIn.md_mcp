@@ -67,6 +67,13 @@ OAuth endpoints:
 
 ## Implemented HTTP API
 
+### Path Boundary
+
+All file, folder, lock, and token root paths are relative to the tenant vault root.
+
+- Accepted examples: `.` , `notes/example.md`, `projects/GoldenBoi111 repo deep dives.md`
+- Rejected examples: `C:\Users\...`, `\\server\share`, `../escape`, `/absolute/unix/path`
+
 ### `GET /api`
 
 Returns the top-level API index and route list.
@@ -178,6 +185,11 @@ Request body matches `POST /api/auth/register`.
 
 List MCP tokens for the current tenant.
 
+Token root fields are vault-relative only:
+
+- `read_roots`
+- `write_roots`
+
 Response includes:
 
 - `token_id`
@@ -226,6 +238,8 @@ Request body:
   "avatarBackground": "#111827"
 }
 ```
+
+`readRoots` and `writeRoots` must be relative to the tenant vault root.
 
 Response:
 
@@ -361,6 +375,31 @@ Request body:
   "embedding_model": "jasper-token-compression-600m"
 }
 ```
+
+#### `POST /api/admin/qdrant/reconcile`
+
+Admin-only repair job that checks whether each file in a tenant vault has Qdrant points and re-embeds any missing files.
+
+Request body:
+
+```json
+{
+  "tenantId": "tenant-id-or-user-id-scope",
+  "path": ".",
+  "embeddingModel": "jasper-token-compression-600m",
+  "repairMissing": true
+}
+```
+
+Supported scope fields:
+
+- `tenantId` or `tenant_id`
+- `userId` or `user_id`
+- `path`
+- `embeddingModel` or `embedding_model`
+- `repairMissing`
+
+If no tenant or user is provided, the route reconciles all users.
 
 ### Files
 
@@ -678,6 +717,17 @@ Tool behavior is tenant-scoped and token-scoped.
 ### JWT Revocations
 
 - `./vaults/.mcp-jwt-revocations.json`
+
+## Scheduled Maintenance
+
+The server starts a Qdrant reconciliation scheduler on boot.
+
+- Runs every Sunday at `12:00 AM`
+- Default timezone: `America/New_York`
+- Override with `QDRANT_RECONCILE_TIMEZONE`
+- The job repairs missing Qdrant embeddings for files under each user tenant
+
+You can also trigger the same repair manually with `POST /api/admin/qdrant/reconcile`.
 
 ## Common Status Codes
 

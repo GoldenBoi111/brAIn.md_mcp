@@ -756,6 +756,16 @@ export async function readFile(vaultRoot: string, locks: Set<string>, relativePa
 	return fs.readFile(target, "utf8");
 }
 
+export async function readVaultFile(vaultRoot: string, relativePath: string): Promise<string> {
+	const rel = normalizeRelPath(relativePath);
+	const target = resolveWithinRoot(vaultRoot, path.join(vaultRoot, rel));
+	const stat = await fs.stat(target).catch(() => null);
+	if (!stat || !stat.isFile()) {
+		throw new BackendError(`File does not exist: ${relativePath}`, 404);
+	}
+	return fs.readFile(target, "utf8");
+}
+
 export async function pathExists(vaultRoot: string, relativePath: string): Promise<boolean> {
 	const target = resolveWithinRoot(vaultRoot, path.join(vaultRoot, normalizeRelPath(relativePath)));
 	try {
@@ -1076,6 +1086,28 @@ export async function qdrantSearch(options: { tenantId: string; queryVector: num
 	const data = await qdrantRequest("POST", `/collections/${DEFAULT_COLLECTION}/points/search`, { vector: options.queryVector, limit: options.topK, with_payload: true, filter: { must: [{ key: "tenant_id", match: { value: options.tenantId } }] } });
 	const results = Array.isArray(data?.result) ? data.result : [];
 	return results.map((item: any) => ({ id: item.id, score: Number(item.score ?? 0), file_id: item.payload?.file_id, legacy_file_path: item.payload?.file_path, chunk_index: item.payload?.chunk_index, embedding_model: item.payload?.embedding_model }));
+}
+
+export async function qdrantHasFilePoints(options: { tenantId: string; fileId: string; legacyFilePath?: string }): Promise<boolean> {
+	await ensureCollection();
+	const filter: Record<string, unknown> = { must: [{ key: "tenant_id", match: { value: options.tenantId } }] };
+	if (options.legacyFilePath) {
+		filter.should = [
+			{ key: "file_id", match: { value: options.fileId } },
+			{ key: "file_path", match: { value: options.legacyFilePath } },
+		];
+		filter.min_should = 1;
+	} else {
+		(filter.must as Record<string, unknown>[]).push({ key: "file_id", match: { value: options.fileId } });
+	}
+	const data = await qdrantRequest("POST", `/collections/${DEFAULT_COLLECTION}/points/scroll`, {
+		limit: 1,
+		with_payload: false,
+		with_vector: false,
+		filter,
+	});
+	const result = data?.result ?? {};
+	return Array.isArray(result.points) && result.points.length > 0;
 }
 
 export async function embedText(text: string): Promise<number[]> {

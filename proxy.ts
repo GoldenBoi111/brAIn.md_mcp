@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const ALLOWED_METHODS = "GET, POST, PUT, DELETE, OPTIONS";
+const ALLOWED_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS";
 const DEFAULT_ALLOWED_HEADERS = [
 	"Content-Type",
 	"Authorization",
